@@ -1,73 +1,46 @@
-# Welcome to your Lovable project
+# Market Compass (iPassport) — Developer Documentation
 
-## Project info
+This documentation is written to align **backend behavior with the current frontend mock** (Vite/React + shadcn/ui) and the product constraints discussed in chat:
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+- **Canonical page = Golden SKU** (configuration-level SKU)
+- **UI shows Top‑10 only** (no infinite list)
+- **SerpAPI cost control**: `google_shopping` is the primary feed; `google_immersive_product` is **selective** (Top‑N / on-click hydration)
+- **Comparison + Guides**: comparison is computed for the same Golden SKU; guides are generated via LLM from a **whitelist of sources**, with versioning and freshness control
+- **Frontend on Vercel** and **Backend on Railway** deployed from a single GitHub **monorepo**
+- **Backend language**: **Python + FastAPI**
 
-## How can I edit this code?
+> Date of this doc snapshot: 2026-01-11
 
-There are several ways of editing your application.
+## Quick navigation
 
-**Use Lovable**
+- [Product & scope](docs/01-product-overview.md)
+- [Core principles](docs/02-principles.md)
+- [Monorepo layout (pnpm workspaces + Python FastAPI)](docs/03-repo-structure.md)
+- [System architecture](docs/04-system-architecture.md)
+- [Data model (Postgres + Redis)](docs/05-data-model.md)
+- [API contract for the current UI](docs/06-api-contract.md)
+- [SerpAPI integration & cost controls](docs/07-serpapi-integration.md)
+- [Deduplication & ranking](docs/08-ranking-and-dedup.md)
+- [Comparison & Guides (LLM + whitelist sources)](docs/09-comparison-and-guides.md)
+- [Operations: local dev, deploy, env](docs/10-operations-and-deploy.md)
+- [Security & reliability](docs/11-security-and-compliance.md)
+- [Roadmap](docs/12-roadmap.md)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Folder map
 
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
 ```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+docs/
+  00-glossary.md
+  01-product-overview.md
+  02-principles.md
+  03-repo-structure.md
+  04-system-architecture.md
+  05-data-model.md
+  06-api-contract.md
+  07-serpapi-integration.md
+  08-ranking-and-dedup.md
+  09-comparison-and-guides.md
+  10-operations-and-deploy.md
+  11-security-and-compliance.md
+  12-roadmap.md
+```

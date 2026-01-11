@@ -1,3 +1,5 @@
+"use client";
+
 import { motion } from "framer-motion";
 
 interface TrustMeterProps {
@@ -24,7 +26,7 @@ export const TrustMeter = ({ score }: TrustMeterProps) => {
             }
           `}
           style={{
-            boxShadow: index < filledBars ? "0 0 6px hsl(211 100% 50% / 0.5)" : "none"
+            boxShadow: index < filledBars ? "0 0 6px oklch(0.6 0.2 250 / 50%)" : "none"
           }}
         />
       ))}

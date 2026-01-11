@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, AlertTriangle, ArrowRight, MapPin, Plane, Cpu, Check } from "lucide-react";
@@ -35,10 +37,10 @@ export const DealCard = ({ deal, index, minTrust }: DealCardProps) => {
   // Availability dot class
   const getAvailabilityClass = () => {
     switch (deal.availability) {
-      case "In Stock": return "availability-dot-instock";
-      case "Limited": return "availability-dot-limited";
-      case "Out of Stock": return "availability-dot-outofstock";
-      default: return "availability-dot-limited";
+      case "In Stock": return "availability-dot availability-dot-instock";
+      case "Limited": return "availability-dot availability-dot-limited";
+      case "Out of Stock": return "availability-dot availability-dot-outofstock";
+      default: return "availability-dot availability-dot-limited";
     }
   };
 

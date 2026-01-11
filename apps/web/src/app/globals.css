@@ -1,0 +1,285 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  
+  /* Core colors */
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  
+  /* iPassport custom colors */
+  --color-titanium: var(--titanium);
+  --color-titanium-light: var(--titanium-light);
+  --color-electric: var(--electric-blue);
+  --color-electric-glow: var(--electric-blue-glow);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-glass: var(--glass-bg);
+  --color-glass-border: var(--glass-border);
+  
+  /* Sidebar */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  
+  /* Radius */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+}
+
+/* iPassport Premium Dark Theme - Default is dark */
+:root {
+  --radius: 1rem;
+  
+  /* Dark theme as default */
+  --background: oklch(0 0 0);
+  --foreground: oklch(0.98 0 0);
+
+  --card: oklch(0.15 0.01 260);
+  --card-foreground: oklch(0.98 0 0);
+
+  --popover: oklch(0.12 0.01 260);
+  --popover-foreground: oklch(0.98 0 0);
+
+  /* Electric blue primary */
+  --primary: oklch(0.6 0.2 250);
+  --primary-foreground: oklch(1 0 0);
+
+  --secondary: oklch(0.22 0.01 260);
+  --secondary-foreground: oklch(0.98 0 0);
+
+  --muted: oklch(0.22 0.01 260);
+  --muted-foreground: oklch(0.65 0.01 260);
+
+  --accent: oklch(0.6 0.2 250);
+  --accent-foreground: oklch(1 0 0);
+
+  --destructive: oklch(0.55 0.2 25);
+  --border: oklch(0.22 0.01 260);
+  --input: oklch(0.22 0.01 260);
+  --ring: oklch(0.6 0.2 250);
+
+  /* iPassport custom tokens */
+  --titanium: oklch(0.65 0.01 260);
+  --titanium-light: oklch(0.75 0.01 260);
+  --electric-blue: oklch(0.6 0.2 250);
+  --electric-blue-glow: oklch(0.7 0.2 250);
+  --surface-1: oklch(0.1 0.01 260);
+  --surface-2: oklch(0.14 0.01 260);
+  --surface-3: oklch(0.18 0.01 260);
+  --success: oklch(0.6 0.15 145);
+  --warning: oklch(0.7 0.15 70);
+  --glass-bg: oklch(1 0 0 / 5%);
+  --glass-border: oklch(1 0 0 / 10%);
+
+  --sidebar: oklch(0.98 0 0);
+  --sidebar-foreground: oklch(0.3 0.01 260);
+  --sidebar-primary: oklch(0.15 0.01 260);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.96 0 0);
+  --sidebar-accent-foreground: oklch(0.15 0.01 260);
+  --sidebar-border: oklch(0.91 0.01 260);
+  --sidebar-ring: oklch(0.6 0.2 250);
+}
+
+.dark {
+  --background: oklch(0 0 0);
+  --foreground: oklch(0.98 0 0);
+  --card: oklch(0.15 0.01 260);
+  --card-foreground: oklch(0.98 0 0);
+  --popover: oklch(0.12 0.01 260);
+  --popover-foreground: oklch(0.98 0 0);
+  --primary: oklch(0.6 0.2 250);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.22 0.01 260);
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted: oklch(0.22 0.01 260);
+  --muted-foreground: oklch(0.65 0.01 260);
+  --accent: oklch(0.6 0.2 250);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.55 0.2 25);
+  --border: oklch(0.22 0.01 260);
+  --input: oklch(0.22 0.01 260);
+  --ring: oklch(0.6 0.2 250);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.01em;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom utility classes - defined outside @layer for Tailwind 4 */
+@utility glass {
+  background-color: var(--glass-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+}
+
+@utility glass-card {
+  background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+}
+
+@utility titanium-border {
+  border: 1px solid oklch(1 0 0 / 10%);
+}
+
+@utility glow-blue {
+  box-shadow: 0 0 20px oklch(0.6 0.2 250 / 40%), 0 0 40px oklch(0.6 0.2 250 / 20%);
+}
+
+@utility glow-blue-subtle {
+  box-shadow: 0 0 10px oklch(0.6 0.2 250 / 30%);
+}
+
+@utility text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(135deg, var(--foreground) 0%, var(--titanium-light) 100%);
+}
+
+@utility text-gradient-blue {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(135deg, var(--electric-blue) 0%, var(--electric-blue-glow) 100%);
+}
+
+@utility tracking-tight-custom {
+  letter-spacing: -0.03em;
+}
+
+/* Scrollbar hide - use as regular class */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Component classes */
+.btn-electric {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  transition: all 0.3s ease-out;
+}
+
+.btn-electric:hover {
+  box-shadow: 0 0 20px oklch(0.6 0.2 250 / 40%);
+  transform: scale(1.02);
+}
+
+.btn-electric:active {
+  transform: scale(0.98);
+}
+
+.btn-glass {
+  background-color: var(--glass-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  color: var(--foreground);
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.btn-glass:hover {
+  background-color: var(--glass-border);
+}
+
+.card-titanium {
+  background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid oklch(1 0 0 / 10%);
+  border-radius: 1rem;
+  padding: 1rem;
+  transition: all 0.3s ease-out;
+}
+
+.card-titanium:hover {
+  border-color: oklch(0.6 0.2 250 / 30%);
+}
+
+/* Availability dots */
+.availability-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.availability-dot-instock {
+  background-color: var(--success);
+  box-shadow: 0 0 6px oklch(0.6 0.15 145 / 80%), 0 0 12px oklch(0.6 0.15 145 / 40%);
+}
+
+.availability-dot-limited {
+  background-color: var(--warning);
+  box-shadow: 0 0 6px oklch(0.7 0.15 70 / 80%), 0 0 12px oklch(0.7 0.15 70 / 40%);
+}
+
+.availability-dot-outofstock {
+  background-color: var(--titanium);
+  box-shadow: none;
+  animation: none;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}

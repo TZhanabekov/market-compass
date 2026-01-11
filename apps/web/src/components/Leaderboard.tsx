@@ -1,3 +1,5 @@
+"use client";
+
 import { motion } from "framer-motion";
 import { MOCK_DEALS } from "@/data/mockData";
 import { DealCard } from "./DealCard";

@@ -1,3 +1,5 @@
+"use client";
+
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ArrowRight, Smartphone, Shield, Check, Minus, CreditCard } from "lucide-react";
 import { Deal, LOCAL_MARKET_DATA } from "@/data/mockData";

@@ -1,0 +1,192 @@
+# .cursorrules — Market Compass (iPassport)
+# Purpose: project-specific rules for Cursor AI to generate code that matches the product constraints.
+# Key constraints: Golden SKU pages, Top-10 only UI, SerpAPI cost control (selective immersive), FastAPI backend.
+
+You are working in the "Market Compass (iPassport)" monorepo.
+
+========================
+1) PRODUCT & NON-NEGOTIABLES
+========================
+- Canonical page is a Golden SKU (configuration-level).
+- UI always shows Top-10 deals (no infinite list).
+- SerpAPI budget matters:
+  - google_shopping is the primary feed (bulk).
+  - google_immersive_product is selective:
+    - eager: Top-1 (optionally Top-3),
+    - lazy: only on CTA click through /r/offers/{offerId}.
+  - Never call immersive for every shopping result.
+  - Always cache immersive results and use locks to prevent request storms.
+- Guides are generated via LLM ONLY from a whitelist of sources (no open web browsing at request time).
+- Comparison must compare the same Golden SKU (home vs destination deal).
+
+If a proposed change violates any point above, do NOT implement it. Propose an alternative.
+
+========================
+2) REPO SHAPE (EXPECTED)
+========================
+- Frontend: apps/web (Vite + React + TS, Tailwind, shadcn/ui)
+- Backend: services/api (Python + FastAPI)
+- Optional worker: services/worker (scheduled refresh jobs)
+- Shared TS types/artifacts: packages/shared (zod schemas, DTOs, generated artifacts)
+
+Always keep frontend and backend contracts aligned. Prefer shared schemas/artifacts over ad-hoc shapes.
+
+========================
+3) CODING STANDARDS
+========================
+Python (FastAPI):
+- Use Python 3.11+.
+- Prefer async endpoints when doing I/O.
+- Use Pydantic v2 models for request/response schemas.
+- Use structured error format consistently:
+  { "error": { "code": str, "message": str, "detail": object } }
+- Add type hints everywhere; keep functions small and testable.
+- Use ruff + black style; no unused imports; no print-debug in production.
+- Keep business logic out of routers:
+  routers -> services -> repositories/stores.
+
+TypeScript (frontend/shared):
+- Keep UI payloads stable and small (Top-10).
+- Use react-query for fetching and caching.
+- Validate API responses with zod when feasible.
+
+========================
+4) BACKEND ARCHITECTURE RULES (FASTAPI)
+========================
+Structure backend modules roughly as:
+- app/main.py (FastAPI instance, middleware, router include)
+- app/routes/ui.py (Home bootstrap)
+- app/routes/redirect.py (CTA redirect + hydration)
+- app/services/ranking.py (effective price, Top-10 selection)
+- app/services/dedup.py (Golden SKU matching, offer dedup)
+- app/services/serpapi_client.py (all SerpAPI calls here)
+- app/services/guides.py (facts -> steps pipeline; whitelist sources)
+- app/stores/postgres.py (DB session + repos)
+- app/stores/redis.py (cache + locks)
+- app/models/* (ORM models)
+- app/schemas/* (Pydantic schemas)
+- app/settings.py (env config)
+- tests/* (unit + integration)
+
+Rules:
+- Routers must be thin: no heavy logic; call services.
+- Services must be deterministic when possible; accept dependencies explicitly.
+- Repos/stores handle persistence/caching; no business ranking logic inside them.
+
+========================
+5) API CONTRACTS (UI-DRIVEN)
+========================
+Must support at minimum:
+- GET /health -> { ok: true }
+- GET /v1/ui/home?sku=...&home=...&minTrust=...&lang=...
+  -> returns HomeResponse shaped for the current UI:
+     - homeMarket
+     - globalWinnerOfferId
+     - leaderboard.deals (<=10)
+     - leaderboard.matchCount
+     - leaderboard.lastUpdatedAt
+- GET /r/offers/{offerId} -> 302 redirect
+  - if merchant_url exists: redirect immediately
+  - else: hydrate via immersive (once), cache, persist, redirect
+  - fallback: redirect to product_link if needed
+
+Do NOT expand response payloads unnecessarily.
+Do NOT add endpoints until the UI needs them, unless they reduce cost/latency.
+
+========================
+6) SERPAPI INTEGRATION (COST CONTROL)
+========================
+- Primary ingestion uses google_shopping:
+  - parse price, merchant name, product_link, immersive token
+- Selective enrichment uses google_immersive_product:
+  - ONLY to obtain direct merchant link (stores[].link) and optional totals
+- Caching:
+  - cache raw shopping responses (TTL 1–6h)
+  - cache immersive by token (TTL 7–30d)
+  - cache merchant_url by offerId (TTL 7–30d)
+- Locks:
+  - lock hydration per offerId to prevent thundering herd (TTL 30–120s)
+- Always record SerpAPI usage counters (calls/day) for budgeting.
+
+Never introduce logic that multiplies immersive calls per page view.
+
+========================
+7) DEDUP & RANKING
+========================
+Golden SKU:
+- Compute stable sku_key from normalized attributes:
+  model + storage + color + condition (+ optional sim_variant/lock_state/region_variant)
+Offer dedup within leaderboard:
+- Dedup key: merchant + price + currency (+ url hash if available)
+Ranking:
+- Sort by effective_price_usd asc, then trust_score desc, then availability.
+Risk slider:
+- Filter: trust_score >= minTrust; return <=10; include matchCount.
+
+If data is missing (shipping/refund unknown):
+- treat unknown components as 0,
+- add metadata flags (unknown_shipping, unknown_refund) for explainability.
+
+========================
+8) COMPARISON & GUIDES (LLM + WHITELIST)
+========================
+Comparison:
+- Always compare the same Golden SKU.
+- Provide savings in USD and percent.
+- Include compatibility caveats (SIM/lock/region/warranty).
+
+Guides:
+- No hand-written guides in MVP.
+- Use Extract -> Compose pipeline:
+  1) Extract structured Country Facts from WHITELIST sources (with citations per field)
+  2) Compose compact UI steps (3–7) + 0–2 alerts
+- Store:
+  - facts_version, last_verified_at, freshness_status (fresh/stale/unknown/needs_review)
+  - guide versions per language
+
+Never allow LLM to invent facts. If not supported by sources, set null and mark unknown.
+
+========================
+9) SECURITY & SAFETY
+========================
+Redirect safety:
+- Redirect only to https URLs sourced from SerpAPI or stored offers.
+- Block javascript:, data:, file: schemes.
+- Consider allowlist/validation for merchant domains when feasible.
+
+CORS:
+- Allow only the Vercel frontend origin(s) in production.
+
+Rate limiting:
+- Apply to /r/offers/{offerId} and to expensive endpoints.
+
+Secrets:
+- Never commit API keys; use Railway/Vercel env vars.
+
+========================
+10) WORKFLOW & ITERATION RULES
+========================
+When implementing changes:
+1) Start from the UI need and the constraints above.
+2) Propose the smallest change that satisfies it.
+3) Keep diffs minimal; do not refactor unrelated code.
+4) Add or update tests for ranking/dedup/hydration where relevant.
+5) Update docs/ if behavior or contracts change.
+
+MANDATORY AFTER EACH ITERATION:
+6) Update the root-level ToDo.md:
+   - mark completed items as done
+   - add newly discovered tasks
+   - note any blockers/decisions made
+   - keep it short, actionable, and ordered by priority
+
+Never leave placeholders or TODOs in shipped code unless explicitly requested.
+
+If uncertain, prefer adding a small, well-documented interface and stubs behind feature flags.
+
+========================
+11) OUTPUT EXPECTATIONS
+========================
+- Always provide complete code (no placeholders).
+- Prefer explicit examples (sample payloads, env vars, curl).
+- Keep responses actionable and consistent with existing project structure.

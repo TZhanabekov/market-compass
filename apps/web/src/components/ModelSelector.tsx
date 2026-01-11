@@ -1,3 +1,5 @@
+"use client";
+
 import { motion } from "framer-motion";
 import { Smartphone } from "lucide-react";
 import { MODELS } from "@/data/mockData";

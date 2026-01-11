@@ -1,3 +1,5 @@
+"use client";
+
 import { motion } from "framer-motion";
 import { Shield, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Slider } from "@/components/ui/slider";

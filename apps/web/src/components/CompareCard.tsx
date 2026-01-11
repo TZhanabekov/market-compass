@@ -1,3 +1,5 @@
+"use client";
+
 import { motion } from "framer-motion";
 import { ArrowRight, TrendingDown } from "lucide-react";
 import { LOCAL_MARKET_DATA, MOCK_DEALS } from "@/data/mockData";
