@@ -1,0 +1,47 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend build
+node_modules/
+dist/
+build/
+.next/
+out/
+
+# Docker / runtime
+*.log
+logs/
+tmp/
+.cache/
+coverage/
+htmlcov/
+
+# DB / dumps
+*.sqlite
+*.db
+*.dump
+*.sql
+postgres_data/
+redis_data/
+
+# Secrets
+!.env
+!.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+credentials/
+**/*secret*
+**/*token*
+
+# Playwright
+.playwright/
+playwright-report/
+test-results/
