@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* SF Pro Display fallback stack with Inter */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&display=swap');
 
 @layer base {
   :root {
@@ -89,9 +91,10 @@
   }
 
   html {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.01em;
   }
 
   body {
@@ -170,6 +173,11 @@
 }
 
 @layer components {
+  /* Titanium border - 1px with 10% white opacity */
+  .titanium-border {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
   .btn-electric {
     @apply bg-primary text-primary-foreground font-semibold px-6 py-3 rounded-xl;
     @apply transition-all duration-300 ease-out;
@@ -184,7 +192,7 @@
   }
 
   .card-titanium {
-    @apply glass-card rounded-2xl p-4;
+    @apply glass-card rounded-2xl p-4 titanium-border;
     @apply transition-all duration-300 ease-out;
     @apply hover:border-primary/30;
   }
@@ -198,17 +206,35 @@
     );
   }
 
+  /* Apple-style availability dots */
   .availability-dot {
     @apply w-2 h-2 rounded-full;
+    animation: pulse-glow 2s ease-in-out infinite;
   }
 
   .availability-dot-instock {
-    @apply availability-dot bg-success;
-    box-shadow: 0 0 8px hsl(var(--success) / 0.6);
+    @apply availability-dot;
+    background-color: hsl(var(--success));
+    box-shadow: 0 0 6px hsl(var(--success) / 0.8), 
+                0 0 12px hsl(var(--success) / 0.4);
   }
 
   .availability-dot-limited {
-    @apply availability-dot bg-warning;
-    box-shadow: 0 0 8px hsl(var(--warning) / 0.6);
+    @apply availability-dot;
+    background-color: hsl(var(--warning));
+    box-shadow: 0 0 6px hsl(var(--warning) / 0.8), 
+                0 0 12px hsl(var(--warning) / 0.4);
+  }
+
+  .availability-dot-outofstock {
+    @apply availability-dot;
+    background-color: hsl(var(--titanium));
+    box-shadow: none;
+    animation: none;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
   }
 }

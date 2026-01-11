@@ -1,3 +1,5 @@
+import { motion } from "framer-motion";
+
 interface TrustMeterProps {
   score: number;
 }
@@ -9,10 +11,13 @@ export const TrustMeter = ({ score }: TrustMeterProps) => {
   return (
     <div className="flex items-center gap-1.5">
       {Array.from({ length: bars }).map((_, index) => (
-        <div
+        <motion.div
           key={index}
+          initial={{ scaleY: 0 }}
+          animate={{ scaleY: 1 }}
+          transition={{ delay: index * 0.05, duration: 0.3 }}
           className={`
-            w-1.5 rounded-full transition-all duration-300
+            w-1.5 rounded-full transition-all duration-300 origin-bottom
             ${index < filledBars 
               ? "bg-primary h-3" 
               : "bg-surface-3 h-2"
@@ -23,7 +28,7 @@ export const TrustMeter = ({ score }: TrustMeterProps) => {
           }}
         />
       ))}
-      <span className="ml-1 text-xs font-medium text-titanium">{score}</span>
+      <span className="ml-1 text-xs font-medium text-titanium tabular-nums">{score}</span>
     </div>
   );
 };

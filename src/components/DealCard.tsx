@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, Plane, AlertTriangle, ArrowRight } from "lucide-react";
 import { Deal, BASE_PRICE_EUR } from "@/data/mockData";
 import { TrustMeter } from "./TrustMeter";
+import { AnimatedNumber } from "./AnimatedNumber";
 
 interface DealCardProps {
   deal: Deal;
@@ -18,6 +19,16 @@ export const DealCard = ({ deal, index, minTrust }: DealCardProps) => {
   
   // Filter out deals below trust threshold
   if (deal.trustScore < minTrust) return null;
+
+  // Availability dot class
+  const getAvailabilityClass = () => {
+    switch (deal.availability) {
+      case "In Stock": return "availability-dot-instock";
+      case "Limited": return "availability-dot-limited";
+      case "Out of Stock": return "availability-dot-outofstock";
+      default: return "availability-dot-limited";
+    }
+  };
 
   return (
     <motion.div
@@ -35,9 +46,9 @@ export const DealCard = ({ deal, index, minTrust }: DealCardProps) => {
       >
         {/* Rank Badge */}
         <div className={`
-          w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg
+          w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg titanium-border
           ${deal.rank === 1 
-            ? "bg-primary/20 text-primary glow-blue-subtle" 
+            ? "bg-primary/20 text-primary glow-blue-subtle border-primary/30" 
             : "bg-surface-2 text-titanium"
           }
         `}>
@@ -53,25 +64,20 @@ export const DealCard = ({ deal, index, minTrust }: DealCardProps) => {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-titanium">{deal.shop}</span>
-            <div className={`
-              flex items-center gap-1.5
-            `}>
-              <div className={`
-                ${deal.availability === "In Stock" 
-                  ? "availability-dot-instock" 
-                  : "availability-dot-limited"
-                }
-              `} />
+            <div className="flex items-center gap-1.5">
+              <div className={getAvailabilityClass()} />
               <span className="text-xs text-titanium">{deal.availability}</span>
             </div>
           </div>
         </div>
 
-        {/* Price & Savings */}
+        {/* Price & Savings with Animation */}
         <div className="text-right flex-shrink-0">
-          <div className="text-lg font-bold text-foreground">${deal.priceUsd}</div>
+          <div className="text-lg font-bold text-foreground">
+            <AnimatedNumber value={deal.priceUsd} prefix="$" />
+          </div>
           <div className="text-sm text-success font-medium">
-            Save €{savingsEur}
+            Save <AnimatedNumber value={savingsEur} prefix="€" />
           </div>
         </div>
 
@@ -98,9 +104,9 @@ export const DealCard = ({ deal, index, minTrust }: DealCardProps) => {
             transition={{ duration: 0.3, ease: "easeInOut" }}
             className="overflow-hidden"
           >
-            <div className="pt-4 mt-4 border-t border-glass-border space-y-4">
+            <div className="pt-4 mt-4 border-t titanium-border border-x-0 border-b-0 space-y-4">
               {/* Tactical Guide */}
-              <div className="flex gap-3 p-3 rounded-xl bg-surface-1">
+              <div className="flex gap-3 p-3 rounded-xl bg-surface-1 titanium-border">
                 <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
                   <Plane className="w-4 h-4 text-primary" />
                 </div>
@@ -115,7 +121,7 @@ export const DealCard = ({ deal, index, minTrust }: DealCardProps) => {
               </div>
 
               {/* Hardware Alert */}
-              <div className="flex gap-3 p-3 rounded-xl bg-warning/10">
+              <div className="flex gap-3 p-3 rounded-xl bg-warning/10 titanium-border">
                 <div className="w-8 h-8 rounded-lg bg-warning/20 flex items-center justify-center flex-shrink-0">
                   <AlertTriangle className="w-4 h-4 text-warning" />
                 </div>
@@ -129,11 +135,11 @@ export const DealCard = ({ deal, index, minTrust }: DealCardProps) => {
                 </div>
               </div>
 
-              {/* CTA Button */}
+              {/* CTA Button - Mobile First, one-hand operation */}
               <motion.button
                 whileHover={{ scale: 1.01, x: 4 }}
-                whileTap={{ scale: 0.99 }}
-                className="w-full btn-electric flex items-center justify-center gap-2"
+                whileTap={{ scale: 0.98 }}
+                className="w-full btn-electric flex items-center justify-center gap-2 py-4"
               >
                 Claim Arbitrage
                 <ArrowRight className="w-4 h-4" />
