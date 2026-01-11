@@ -18,10 +18,10 @@
 ### Backend
 | Технология | Назначение |
 |------------|------------|
-| **FastAPI** (Python 3.11+) | REST API |
-| **Docker** | Контейнеризация |
+| **FastAPI** (Python 3.11+) ✅ | REST API |
+| **Docker** ✅ | Контейнеризация |
 | **Railway** | Деплой, автоскейлинг |
-| **Pydantic v2** | Схемы запросов/ответов |
+| **Pydantic v2** ✅ | Схемы запросов/ответов |
 
 ### Данные и кеш
 | Технология | Назначение |
@@ -63,89 +63,71 @@
 - [x] Добавлены "use client" директивы для клиентских компонентов
 - [x] Проект собирается и запускается успешно
 
+### Phase 0.2 — Инфраструктура бэкенда ✅
+- [x] Создан FastAPI backend в `services/api`
+- [x] Структура проекта:
+  - [x] `app/main.py` — FastAPI instance, middleware, lifespan
+  - [x] `app/settings.py` — Pydantic Settings
+  - [x] `app/routes/ui.py` — GET /v1/ui/home
+  - [x] `app/routes/redirect.py` — GET /r/offers/{offerId}
+  - [x] `app/services/` — ranking, dedup, trust, hydration, serpapi_client
+  - [x] `app/stores/` — postgres, redis
+  - [x] `app/models/` — GoldenSku, Merchant, Offer
+  - [x] `app/schemas/` — HomeResponse, Deal, etc.
+- [x] Docker Compose для локальной разработки:
+  - [x] FastAPI app
+  - [x] PostgreSQL 16
+  - [x] Redis 7
+- [x] Dockerfile для FastAPI (multi-stage build)
+- [x] Базовые тесты (health, home endpoint)
+
 ### Текущая структура:
 ```
 apps/
-├── web/           # ✅ Next.js 16 (основной)
-└── api/           # Node.js/Fastify прототип (требует миграции на FastAPI)
+├── web/               # ✅ Next.js 16 (основной фронтенд)
+└── api/               # Node.js/Fastify прототип (deprecated, для референса)
+
+services/
+└── api/               # ✅ FastAPI backend (основной)
+    ├── app/
+    │   ├── main.py
+    │   ├── settings.py
+    │   ├── routes/
+    │   ├── services/
+    │   ├── stores/
+    │   ├── models/
+    │   └── schemas/
+    ├── tests/
+    ├── Dockerfile
+    └── pyproject.toml
 ```
 
 ---
 
 ## 🔄 Текущие задачи
 
-### Cleanup
-- [x] ~~Удалить `apps/web-vite`~~ ✅
-- [ ] Обновить документацию (docs/) с актуальной структурой
+### Phase 1 — Backend API (полная интеграция)
 
----
-
-## Phase 0.2 — Инфраструктура бэкенда
-
-### Создать FastAPI backend
-- [ ] Создать `services/api` с FastAPI (Python 3.11+)
-- [ ] Структура проекта:
-```
-services/api/
-├── app/
-│   ├── main.py              # FastAPI instance
-│   ├── settings.py          # Pydantic Settings
-│   ├── routes/
-│   │   ├── ui.py            # GET /v1/ui/home
-│   │   └── redirect.py      # GET /r/offers/{offerId}
-│   ├── services/
-│   │   ├── serpapi_client.py
-│   │   ├── ranking.py
-│   │   ├── dedup.py
-│   │   └── trust.py
-│   ├── stores/
-│   │   ├── postgres.py
-│   │   └── redis.py
-│   ├── models/              # SQLAlchemy models
-│   └── schemas/             # Pydantic schemas
-├── tests/
-├── Dockerfile
-├── pyproject.toml
-└── alembic/                 # Migrations
-```
-
-### Docker Compose для локальной разработки
-- [ ] Dockerfile для FastAPI
-- [ ] docker-compose.yml:
-  - [ ] FastAPI app
-  - [ ] PostgreSQL
-  - [ ] Redis
-
-### Настройка внешних сервисов
-- [ ] PostgreSQL: создать базу в Neon или Supabase
-- [ ] Upstash Redis: создать инстанс
-- [ ] Vercel: подключить репозиторий для `apps/web`
-
----
-
-## Phase 1 — Backend API (FastAPI)
-
-### 1.1 База данных (PostgreSQL)
-- [ ] SQLAlchemy models:
-  - [ ] `golden_skus`
-  - [ ] `merchants`
-  - [ ] `offers`
-  - [ ] `materialized_leaderboards`
+#### 1.1 База данных (PostgreSQL)
+- [x] SQLAlchemy models:
+  - [x] `golden_skus`
+  - [x] `merchants`
+  - [x] `offers`
 - [ ] Alembic миграции
 - [ ] Seed данные: Golden SKU для iPhone 16 Pro
 
-### 1.2 Redis кеширование (Upstash)
-- [ ] Кеш SerpAPI ответов (TTL 1-6h)
-- [ ] Кеш курсов валют (TTL ~1h)
-- [ ] Кеш UI payload (TTL 30-300s)
-- [ ] Locks для hydration (TTL 30-120s)
+#### 1.2 Redis кеширование
+- [x] Структура кеша (TTL политики)
+- [x] Locks для hydration (предотвращение thundering herd)
+- [ ] Интеграция с Upstash Redis (production)
 
-### 1.3 API эндпоинты
-- [ ] `GET /health`
-- [ ] `GET /v1/ui/home?sku=...&home=...&minTrust=...&lang=...`
-- [ ] `GET /r/offers/{offerId}` — redirect с lazy hydration
+#### 1.3 API эндпоинты
+- [x] `GET /health`
+- [x] `GET /v1/ui/home?sku=...&home=...&minTrust=...&lang=...`
+- [x] `GET /r/offers/{offerId}` — redirect (mock data)
+- [ ] Подключить реальные данные из БД
 
-### 1.4 Курсы валют
+#### 1.4 Курсы валют
 - [ ] Интеграция с openexchangerates API
 - [ ] Кеширование в Redis (TTL ~1 час)
 
@@ -153,12 +135,13 @@ services/api/
 
 ## Phase 2 — SerpAPI интеграция
 
-- [ ] SerpAPI клиент (google_shopping + immersive)
+- [x] SerpAPI клиент (структура для google_shopping + immersive)
+- [ ] Реальные вызовы SerpAPI
 - [ ] Regex extraction для атрибутов iPhone
 - [ ] GPT-4o-mini fallback для сложных случаев
-- [ ] Trust Score (0-100)
-- [ ] Ranking по effective price
-- [ ] Scheduled refresh jobs
+- [x] Trust Score (0-100) — базовый алгоритм
+- [x] Ranking по effective price
+- [ ] Scheduled refresh jobs (worker)
 
 ---
 
@@ -192,19 +175,22 @@ services/api/
 
 | # | Задача | Приоритет |
 |---|--------|-----------|
-| 1 | Создать FastAPI backend scaffold в `services/api` | 🔴 High |
-| 2 | Docker Compose (FastAPI + Postgres + Redis) | 🔴 High |
-| 3 | Настроить Neon/Supabase PostgreSQL | 🟡 Medium |
-| 4 | Настроить Upstash Redis | 🟡 Medium |
-| 5 | Seed данные для Golden SKU | 🟡 Medium |
+| 1 | Запустить docker-compose, проверить API | 🔴 High |
+| 2 | Настроить Alembic миграции | 🔴 High |
+| 3 | Подключить фронтенд к API (react-query) | 🔴 High |
+| 4 | Настроить Neon/Supabase PostgreSQL (production) | 🟡 Medium |
+| 5 | Настроить Upstash Redis (production) | 🟡 Medium |
+| 6 | Seed данные для Golden SKU | 🟡 Medium |
 
 ---
 
 ## Заметки
 
 - ✅ Frontend мигрирован на Next.js 16 + Tailwind 4
+- ✅ FastAPI backend создан в `services/api`
+- ✅ Docker Compose настроен для локальной разработки
 - ✅ pnpm настроен как package manager
-- Прототип API (Fastify) в `apps/api/src/index.ts` — для референса
+- Прототип API (Fastify) в `apps/api/src/index.ts` — deprecated, для референса
 - Shared Zod schemas в `packages/shared/src/index.ts` — сохраняем как контракт
 
 ## Vercel настройки
@@ -216,3 +202,11 @@ services/api/
 | **Build Command** | `pnpm build` |
 | **Output Directory** | _(оставить пустым)_ |
 | **Install Command** | `pnpm install` |
+
+## Railway настройки (Backend)
+
+| Параметр | Значение |
+|----------|----------|
+| **Root Directory** | `services/api` |
+| **Builder** | Dockerfile |
+| **Port** | 8080 |
