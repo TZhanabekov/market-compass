@@ -34,10 +34,10 @@ export const ModelSelector = ({ selectedModel, onSelectModel }: ModelSelectorPro
               onClick={() => onSelectModel(model.id)}
               className={`
                 relative flex-shrink-0 flex flex-col items-center gap-3 p-4 rounded-2xl
-                min-w-[120px] transition-all duration-300
+                min-w-[120px] transition-all duration-300 titanium-border
                 ${isSelected 
-                  ? "glass-card border-2 border-primary glow-blue-subtle" 
-                  : "glass-card border border-transparent hover:border-glass-border"
+                  ? "glass-card border-2 !border-primary glow-blue-subtle" 
+                  : "glass-card hover:border-primary/20"
                 }
               `}
             >

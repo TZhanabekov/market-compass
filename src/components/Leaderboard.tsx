@@ -18,10 +18,10 @@ export const Leaderboard = ({ minTrust }: LeaderboardProps) => {
         className="flex items-center justify-between mb-4"
       >
         <h2 className="text-sm font-medium text-titanium uppercase tracking-wider">
-          Global Leaderboard
+          Top 10 Global Deals
         </h2>
-        <span className="text-xs text-titanium">
-          {filteredDeals.length} deals found
+        <span className="text-xs text-titanium titanium-border px-2 py-1 rounded-full">
+          {filteredDeals.length} matches
         </span>
       </motion.div>
 
