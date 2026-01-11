@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Plane, AlertTriangle, ArrowRight } from "lucide-react";
-import { Deal, BASE_PRICE_EUR } from "@/data/mockData";
+import { ChevronDown, AlertTriangle, ArrowRight, MapPin, Plane, Cpu, Check } from "lucide-react";
+import { Deal, LOCAL_MARKET_DATA } from "@/data/mockData";
 import { TrustMeter } from "./TrustMeter";
 import { AnimatedNumber } from "./AnimatedNumber";
 
@@ -11,11 +11,23 @@ interface DealCardProps {
   minTrust: number;
 }
 
+// Icon mapping for guide steps
+const getGuideIcon = (iconName: string) => {
+  const icons: Record<string, React.ReactNode> = {
+    "map-pin": <MapPin className="w-4 h-4 text-primary" />,
+    "plane": <Plane className="w-4 h-4 text-primary" />,
+    "cpu": <Cpu className="w-4 h-4 text-primary" />,
+    "check": <Check className="w-4 h-4 text-success" />,
+    "alert-triangle": <AlertTriangle className="w-4 h-4 text-warning" />,
+  };
+  return icons[iconName] || <MapPin className="w-4 h-4 text-primary" />;
+};
+
 export const DealCard = ({ deal, index, minTrust }: DealCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   
-  // Calculate EUR savings relative to base price
-  const savingsEur = Math.round(BASE_PRICE_EUR * (deal.savings / 100));
+  // Calculate savings relative to local market price
+  const savingsUsd = LOCAL_MARKET_DATA.iphone16pro_price_usd - deal.finalEffectivePrice;
   
   // Filter out deals below trust threshold
   if (deal.trustScore < minTrust) return null;
@@ -74,10 +86,10 @@ export const DealCard = ({ deal, index, minTrust }: DealCardProps) => {
         {/* Price & Savings with Animation */}
         <div className="text-right flex-shrink-0">
           <div className="text-lg font-bold text-foreground">
-            <AnimatedNumber value={deal.priceUsd} prefix="$" />
+            <AnimatedNumber value={deal.finalEffectivePrice} prefix="$" />
           </div>
           <div className="text-sm text-success font-medium">
-            Save <AnimatedNumber value={savingsEur} prefix="€" />
+            Save <AnimatedNumber value={savingsUsd} prefix="$" />
           </div>
         </div>
 
@@ -105,33 +117,59 @@ export const DealCard = ({ deal, index, minTrust }: DealCardProps) => {
             className="overflow-hidden"
           >
             <div className="pt-4 mt-4 border-t titanium-border border-x-0 border-b-0 space-y-4">
-              {/* Tactical Guide */}
-              <div className="flex gap-3 p-3 rounded-xl bg-surface-1 titanium-border">
-                <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                  <Plane className="w-4 h-4 text-primary" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-1">
-                    Tactical Guide
-                  </h4>
-                  <p className="text-sm text-titanium leading-relaxed">
-                    {deal.airportGuide}
-                  </p>
-                </div>
+              {/* Savings Header */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-success/10 border border-success/30">
+                <span className="text-sm text-foreground font-medium">Potential Savings vs {LOCAL_MARKET_DATA.country}</span>
+                <span className="text-lg font-bold text-success">
+                  $<AnimatedNumber value={savingsUsd} />
+                </span>
               </div>
 
               {/* Hardware Alert */}
-              <div className="flex gap-3 p-3 rounded-xl bg-warning/10 titanium-border">
-                <div className="w-8 h-8 rounded-lg bg-warning/20 flex items-center justify-center flex-shrink-0">
-                  <AlertTriangle className="w-4 h-4 text-warning" />
+              {deal.restrictionAlert && (
+                <div className="flex gap-3 p-3 rounded-xl bg-warning/10 titanium-border">
+                  <div className="w-8 h-8 rounded-lg bg-warning/20 flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="w-4 h-4 text-warning" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground mb-1">
+                      Hardware Alert
+                    </h4>
+                    <p className="text-sm text-titanium leading-relaxed">
+                      {deal.restrictionAlert}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-1">
-                    Hardware Alert
-                  </h4>
-                  <p className="text-sm text-titanium leading-relaxed">
-                    {deal.restriction}
-                  </p>
+              )}
+
+              {/* Tactical Intel Section */}
+              <div className="p-4 rounded-xl bg-surface-1 titanium-border">
+                <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-primary" />
+                  Tactical Intel
+                </h4>
+                <div className="space-y-3">
+                  {deal.guideSteps.map((step, stepIndex) => (
+                    <motion.div
+                      key={stepIndex}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: stepIndex * 0.1 }}
+                      className="flex gap-3"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        {getGuideIcon(step.icon)}
+                      </div>
+                      <div>
+                        <h5 className="text-sm font-semibold text-foreground">
+                          {step.title}
+                        </h5>
+                        <p className="text-sm text-titanium leading-relaxed">
+                          {step.desc}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
               </div>
 

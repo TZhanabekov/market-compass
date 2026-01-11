@@ -2,10 +2,11 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { MapPin, ChevronDown } from "lucide-react";
 import { LocationModal } from "./LocationModal";
+import { LOCAL_MARKET_DATA } from "@/data/mockData";
 
 export const Header = () => {
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState("Germany");
+  const [currentLocation, setCurrentLocation] = useState(LOCAL_MARKET_DATA.country);
 
   return (
     <>
@@ -38,8 +39,10 @@ export const Header = () => {
               <span className="text-sm text-titanium">
                 <span className="hidden sm:inline">📍 Sensed: </span>
                 <span className="text-foreground font-medium">{currentLocation}</span>
+                <span className="text-titanium ml-1.5 hidden sm:inline">
+                  • Local: <span className="text-foreground font-medium">${LOCAL_MARKET_DATA.iphone16pro_price_usd}</span>
+                </span>
               </span>
-              <span className="text-xs text-primary hidden sm:inline">Not there?</span>
               <ChevronDown className="w-4 h-4 text-titanium" />
             </motion.button>
           </div>
