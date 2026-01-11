@@ -1,7 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Для статического экспорта раскомментировать:
+  // output: 'export',
+  
+  // Отключить телеметрию (опционально)
+  // typescript: {
+  //   ignoreBuildErrors: false,
+  // },
 };
 
 export default nextConfig;

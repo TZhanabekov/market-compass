@@ -66,8 +66,7 @@
 ### Текущая структура:
 ```
 apps/
-├── web/           # ✅ Next.js 16 (новый, основной)
-├── web-vite/      # ⚠️ Старый Vite проект (удалить после проверки)
+├── web/           # ✅ Next.js 16 (основной)
 └── api/           # Node.js/Fastify прототип (требует миграции на FastAPI)
 ```
 
@@ -76,7 +75,7 @@ apps/
 ## 🔄 Текущие задачи
 
 ### Cleanup
-- [ ] Удалить `apps/web-vite` после финальной проверки Next.js версии
+- [x] ~~Удалить `apps/web-vite`~~ ✅
 - [ ] Обновить документацию (docs/) с актуальной структурой
 
 ---
@@ -193,17 +192,27 @@ services/api/
 
 | # | Задача | Приоритет |
 |---|--------|-----------|
-| 1 | Удалить `apps/web-vite` | 🟢 Low |
-| 2 | Создать FastAPI backend scaffold в `services/api` | 🔴 High |
-| 3 | Docker Compose (FastAPI + Postgres + Redis) | 🔴 High |
-| 4 | Настроить Neon/Supabase PostgreSQL | 🟡 Medium |
-| 5 | Настроить Upstash Redis | 🟡 Medium |
-| 6 | Seed данные для Golden SKU | 🟡 Medium |
+| 1 | Создать FastAPI backend scaffold в `services/api` | 🔴 High |
+| 2 | Docker Compose (FastAPI + Postgres + Redis) | 🔴 High |
+| 3 | Настроить Neon/Supabase PostgreSQL | 🟡 Medium |
+| 4 | Настроить Upstash Redis | 🟡 Medium |
+| 5 | Seed данные для Golden SKU | 🟡 Medium |
 
 ---
 
 ## Заметки
 
 - ✅ Frontend мигрирован на Next.js 16 + Tailwind 4
+- ✅ pnpm настроен как package manager
 - Прототип API (Fastify) в `apps/api/src/index.ts` — для референса
 - Shared Zod schemas в `packages/shared/src/index.ts` — сохраняем как контракт
+
+## Vercel настройки
+
+| Параметр | Значение |
+|----------|----------|
+| **Root Directory** | `apps/web` |
+| **Framework Preset** | Next.js |
+| **Build Command** | `pnpm build` |
+| **Output Directory** | _(оставить пустым)_ |
+| **Install Command** | `pnpm install` |
