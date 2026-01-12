@@ -12,8 +12,6 @@ Risk slider:
 """
 
 import json
-import os
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
 from sqlalchemy import select
@@ -21,18 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.models import Offer, GoldenSku
 from app.schemas import Deal, GuideStep
+from app.settings import get_settings
 
 # Database connection (will be managed by app lifespan in production)
 _engine = None
 _session_factory = None
-
-
-def _get_database_url() -> str:
-    """Get database URL from environment."""
-    return os.getenv(
-        "DATABASE_URL",
-        "postgresql+asyncpg://postgres:postgres@localhost:5433/market_compass",
-    )
 
 
 async def _get_session() -> AsyncSession:
@@ -40,7 +31,8 @@ async def _get_session() -> AsyncSession:
     global _engine, _session_factory
 
     if _engine is None:
-        _engine = create_async_engine(_get_database_url(), echo=False)
+        settings = get_settings()
+        _engine = create_async_engine(settings.database_url, echo=settings.debug)
         _session_factory = async_sessionmaker(
             _engine, class_=AsyncSession, expire_on_commit=False
         )

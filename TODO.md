@@ -144,6 +144,7 @@ services/
 - [x] Trust Score (0-100) — базовый алгоритм
 - [x] Ranking по effective price
 - [ ] Scheduled refresh jobs (worker)
+- [ ] ⚠️ Удалить seed-данные и заменить реальными из SerpAPI
 
 ---
 

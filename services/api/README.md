@@ -98,6 +98,42 @@ services/api/
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins |
 | `SERPAPI_KEY` | `` | SerpAPI key (optional for now) |
 
+## Railway Deployment
+
+### Setup
+
+1. Create a new project on Railway
+2. Add PostgreSQL plugin
+3. Add Redis plugin (optional for now)
+4. Create a new service from GitHub repo
+5. Set root directory to `services/api`
+6. Railway will auto-detect Dockerfile
+
+### Environment Variables (Railway)
+
+Set these in Railway dashboard:
+
+| Variable | Value |
+|----------|-------|
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference) |
+| `REDIS_URL` | `${{Redis.REDIS_URL}}` (reference, optional) |
+| `CORS_ORIGINS` | `["https://your-frontend.vercel.app"]` |
+| `DEBUG` | `false` |
+
+### Run Migrations
+
+After deployment, run migrations via Railway CLI or shell:
+
+```bash
+railway run alembic upgrade head
+```
+
+### Seed Data (optional)
+
+```bash
+railway run python -m scripts.seed
+```
+
 ## Development
 
 ### Run Tests
