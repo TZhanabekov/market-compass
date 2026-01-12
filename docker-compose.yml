@@ -38,7 +38,7 @@ services:
   postgres:
     image: postgres:16-alpine
     ports:
-      - "5432:5432"
+      - "5433:5432"  # Use 5433 to avoid conflicts with other projects
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -59,7 +59,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"  # Use 6380 to avoid conflicts with other projects
     volumes:
       - redis_data:/data
     restart: unless-stopped
