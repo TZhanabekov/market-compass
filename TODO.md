@@ -97,6 +97,8 @@ services/
     │   ├── stores/
     │   ├── models/
     │   └── schemas/
+    ├── alembic/       # ✅ Database migrations
+    │   └── versions/
     ├── tests/
     ├── Dockerfile
     └── pyproject.toml
@@ -113,7 +115,7 @@ services/
   - [x] `golden_skus`
   - [x] `merchants`
   - [x] `offers`
-- [ ] Alembic миграции
+- [x] Alembic миграции (async PostgreSQL support)
 - [ ] Seed данные: Golden SKU для iPhone 16 Pro
 
 #### 1.2 Redis кеширование
@@ -175,12 +177,12 @@ services/
 
 | # | Задача | Приоритет |
 |---|--------|-----------|
-| 1 | Запустить docker-compose, проверить API | 🔴 High |
-| 2 | Настроить Alembic миграции | 🔴 High |
+| 1 | ~~Запустить docker-compose, проверить API~~ ✅ | Done |
+| 2 | ~~Настроить Alembic миграции~~ ✅ | Done |
 | 3 | Подключить фронтенд к API (react-query) | 🔴 High |
-| 4 | Настроить Neon/Supabase PostgreSQL (production) | 🟡 Medium |
-| 5 | Настроить Upstash Redis (production) | 🟡 Medium |
-| 6 | Seed данные для Golden SKU | 🟡 Medium |
+| 4 | Seed данные для Golden SKU + iPhone 16 Pro | 🔴 High |
+| 5 | Настроить Neon/Supabase PostgreSQL (production) | 🟡 Medium |
+| 6 | Настроить Upstash Redis (production) | 🟡 Medium |
 
 ---
 
