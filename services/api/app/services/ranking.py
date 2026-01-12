@@ -11,137 +11,56 @@ Risk slider:
 - Include matchCount (total before filtering)
 """
 
+import json
+import os
+from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from app.models import Offer, GoldenSku
 from app.schemas import Deal, GuideStep
 
-# Mock data for initial implementation
-# Will be replaced with DB queries
-_MOCK_DEALS = [
-    Deal(
-        offer_id="offer_jp_1",
-        rank=1,
-        country_code="JP",
-        country="Japan",
-        city="Tokyo",
-        flag="🇯🇵",
-        shop="Bic Camera",
-        availability="In Stock",
-        price_usd=741,
-        tax_refund_value=65,
-        final_effective_price=676,
-        local_price="¥112,800",
-        trust_score=98,
-        sim_type="eSIM + Physical SIM",
-        warranty="1-Year Apple Global",
-        restriction_alert="Camera shutter sound always on (J/A model)",
-        guide_steps=[
-            GuideStep(
-                icon="map-pin",
-                title="Where to Buy",
-                desc="Bic Camera Yurakucho. Show passport at checkout for tax-free price.",
-            ),
-            GuideStep(
-                icon="plane",
-                title="Airport Refund",
-                desc="Narita Terminal 2, 'Customs' counter before security. Goods must be sealed.",
-            ),
-            GuideStep(
-                icon="cpu",
-                title="Hardware Check",
-                desc="Verify Model A3102. Shutter sound is permanent.",
-            ),
-        ],
-    ),
-    Deal(
-        offer_id="offer_us_1",
-        rank=2,
-        country_code="US",
-        country="United States",
-        city="Delaware",
-        flag="🇺🇸",
-        shop="Apple Store",
-        availability="Limited",
-        price_usd=799,
-        tax_refund_value=0,
-        final_effective_price=799,
-        local_price="$799",
-        trust_score=100,
-        sim_type="eSIM Only (No Physical Slot)",
-        warranty="1-Year Apple Global",
-        restriction_alert="Model LL/A - No physical SIM tray.",
-        guide_steps=[
-            GuideStep(
-                icon="map-pin",
-                title="Tax-Free State",
-                desc="Buy in Delaware or Oregon for 0% sales tax at register.",
-            ),
-            GuideStep(
-                icon="cpu",
-                title="Important Info",
-                desc="Ensure your home carrier supports eSIM before buying.",
-            ),
-        ],
-    ),
-    Deal(
-        offer_id="offer_hk_1",
-        rank=3,
-        country_code="HK",
-        country="Hong Kong",
-        city="Central",
-        flag="🇭🇰",
-        shop="Fortress HK",
-        availability="In Stock",
-        price_usd=815,
-        tax_refund_value=0,
-        final_effective_price=815,
-        local_price="HK$6,350",
-        trust_score=94,
-        sim_type="Dual Physical SIM",
-        warranty="1-Year Apple Global",
-        restriction_alert="Dual Physical SIM slots supported (ZA/A model)",
-        guide_steps=[
-            GuideStep(
-                icon="map-pin",
-                title="Where to Buy",
-                desc="Fortress HK in Central or Apple Causeway Bay for official pricing.",
-            ),
-            GuideStep(
-                icon="check",
-                title="Free Port",
-                desc="HK is a free port. No VAT refund needed, prices are already net.",
-            ),
-        ],
-    ),
-    Deal(
-        offer_id="offer_ae_1",
-        rank=4,
-        country_code="AE",
-        country="UAE",
-        city="Dubai",
-        flag="🇦🇪",
-        shop="Sharaf DG",
-        availability="In Stock",
-        price_usd=845,
-        tax_refund_value=35,
-        final_effective_price=810,
-        local_price="AED 3,100",
-        trust_score=92,
-        sim_type="eSIM + Physical SIM",
-        warranty="1-Year Apple Global",
-        restriction_alert="FaceTime usually works outside UAE, but verify.",
-        guide_steps=[
-            GuideStep(
-                icon="plane",
-                title="Planet Tax Free",
-                desc="Scan QR code at Planet kiosks in DXB Terminal 3 before checking bags.",
-            ),
-            GuideStep(
-                icon="alert-triangle",
-                title="FaceTime Note",
-                desc="FaceTime is disabled in UAE but usually activates when abroad.",
-            ),
-        ],
-    ),
-]
+# Database connection (will be managed by app lifespan in production)
+_engine = None
+_session_factory = None
+
+
+def _get_database_url() -> str:
+    """Get database URL from environment."""
+    return os.getenv(
+        "DATABASE_URL",
+        "postgresql+asyncpg://postgres:postgres@localhost:5433/market_compass",
+    )
+
+
+async def _get_session() -> AsyncSession:
+    """Get database session."""
+    global _engine, _session_factory
+
+    if _engine is None:
+        _engine = create_async_engine(_get_database_url(), echo=False)
+        _session_factory = async_sessionmaker(
+            _engine, class_=AsyncSession, expire_on_commit=False
+        )
+
+    return _session_factory()
+
+
+# Country code to flag emoji mapping
+COUNTRY_FLAGS = {
+    "JP": "🇯🇵",
+    "US": "🇺🇸",
+    "HK": "🇭🇰",
+    "AE": "🇦🇪",
+    "DE": "🇩🇪",
+    "GB": "🇬🇧",
+    "FR": "🇫🇷",
+    "CN": "🇨🇳",
+    "KR": "🇰🇷",
+    "SG": "🇸🇬",
+}
 
 
 async def get_top_deals(
@@ -159,23 +78,108 @@ async def get_top_deals(
     Returns:
         List of Deal objects, sorted by effective_price_usd ASC, trust_score DESC.
     """
-    # Filter by trust score
-    filtered = [d for d in _MOCK_DEALS if d.trust_score >= min_trust]
+    session = await _get_session()
 
-    # Sort: effective_price ASC, trust_score DESC
-    sorted_deals = sorted(
-        filtered,
-        key=lambda d: (d.final_effective_price, -d.trust_score),
-    )
+    try:
+        # Find the SKU
+        sku_result = await session.execute(
+            select(GoldenSku).where(GoldenSku.sku_key == sku_key)
+        )
+        sku = sku_result.scalar_one_or_none()
 
-    # Limit to max 10
-    result = sorted_deals[: min(limit, 10)]
+        if not sku:
+            # Fallback: try to find any SKU matching the model
+            model_key = "-".join(sku_key.split("-")[:3]) if "-" in sku_key else sku_key
+            sku_result = await session.execute(
+                select(GoldenSku).where(GoldenSku.model == model_key).limit(1)
+            )
+            sku = sku_result.scalar_one_or_none()
 
-    # Re-assign ranks after filtering
-    for i, deal in enumerate(result, start=1):
-        deal.rank = i
+        if not sku:
+            return []
 
-    return result
+        # Query offers for this SKU, filtered by trust score
+        query = (
+            select(Offer)
+            .where(Offer.sku_id == sku.id)
+            .where(Offer.trust_score >= min_trust)
+            .order_by(Offer.final_effective_price.asc(), Offer.trust_score.desc())
+            .limit(min(limit, 10))
+        )
+
+        result = await session.execute(query)
+        offers = result.scalars().all()
+
+        # Convert to Deal schemas
+        deals: list[Deal] = []
+        for rank, offer in enumerate(offers, start=1):
+            # Parse guide steps from JSON
+            guide_steps = []
+            if offer.guide_steps_json:
+                try:
+                    steps_data = json.loads(offer.guide_steps_json)
+                    guide_steps = [GuideStep(**step) for step in steps_data]
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            deal = Deal(
+                offer_id=offer.offer_id,
+                rank=rank,
+                country_code=offer.country_code,
+                country=offer.country,
+                city=offer.city or "",
+                flag=COUNTRY_FLAGS.get(offer.country_code, "🌍"),
+                shop=offer.shop_name,
+                availability=offer.availability,
+                price_usd=offer.price_usd,
+                tax_refund_value=offer.tax_refund_value,
+                final_effective_price=offer.final_effective_price,
+                local_price=offer.local_price_formatted,
+                trust_score=offer.trust_score,
+                sim_type=offer.sim_type or "",
+                warranty=offer.warranty or "",
+                restriction_alert=offer.restriction_alert,
+                guide_steps=guide_steps,
+            )
+            deals.append(deal)
+
+        return deals
+
+    finally:
+        await session.close()
+
+
+async def get_total_offer_count(sku_key: str) -> int:
+    """Get total number of offers for a SKU (before filtering).
+
+    Args:
+        sku_key: Golden SKU key.
+
+    Returns:
+        Total offer count.
+    """
+    session = await _get_session()
+
+    try:
+        # Find the SKU
+        sku_result = await session.execute(
+            select(GoldenSku).where(GoldenSku.sku_key == sku_key)
+        )
+        sku = sku_result.scalar_one_or_none()
+
+        if not sku:
+            return 0
+
+        # Count offers
+        from sqlalchemy import func
+
+        count_result = await session.execute(
+            select(func.count(Offer.id)).where(Offer.sku_id == sku.id)
+        )
+        return count_result.scalar() or 0
+
+    finally:
+        await session.close()
 
 
 async def calculate_effective_price(

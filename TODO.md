@@ -116,7 +116,7 @@ services/
   - [x] `merchants`
   - [x] `offers`
 - [x] Alembic миграции (async PostgreSQL support)
-- [ ] Seed данные: Golden SKU для iPhone 16 Pro
+- [x] Seed данные: Golden SKU для iPhone 16 Pro/Max + sample offers
 
 #### 1.2 Redis кеширование
 - [x] Структура кеша (TTL политики)
@@ -126,8 +126,8 @@ services/
 #### 1.3 API эндпоинты
 - [x] `GET /health`
 - [x] `GET /v1/ui/home?sku=...&home=...&minTrust=...&lang=...`
-- [x] `GET /r/offers/{offerId}` — redirect (mock data)
-- [ ] Подключить реальные данные из БД
+- [x] `GET /r/offers/{offerId}` — redirect
+- [x] API использует данные из PostgreSQL
 
 #### 1.4 Курсы валют
 - [ ] Интеграция с openexchangerates API
@@ -167,8 +167,11 @@ services/
 
 ## Phase 5 — Admin & Observability
 
+- [ ] Admin panel для управления:
+  - [ ] iPhone models (16 Pro, 16 Pro Max, будущие модели)
+  - [ ] Golden SKUs (storage/color/condition варианты)
+  - [ ] Merchants (добавление, верификация, blacklist)
 - [ ] Review queue для low-confidence matches
-- [ ] Merchant management
 - [ ] Sentry + Checkly + Vercel Analytics
 
 ---
@@ -179,8 +182,8 @@ services/
 |---|--------|-----------|
 | 1 | ~~Запустить docker-compose, проверить API~~ ✅ | Done |
 | 2 | ~~Настроить Alembic миграции~~ ✅ | Done |
-| 3 | Подключить фронтенд к API (react-query) | 🔴 High |
-| 4 | Seed данные для Golden SKU + iPhone 16 Pro | 🔴 High |
+| 3 | ~~Seed данные для Golden SKU + iPhone 16 Pro~~ ✅ | Done |
+| 4 | Подключить фронтенд к API (react-query) | 🔴 High |
 | 5 | Настроить Neon/Supabase PostgreSQL (production) | 🟡 Medium |
 | 6 | Настроить Upstash Redis (production) | 🟡 Medium |
 

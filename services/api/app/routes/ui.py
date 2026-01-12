@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query
 
-from app.schemas import Deal, GuideStep, HomeMarket, HomeResponse, Leaderboard
-from app.services.ranking import get_top_deals
+from app.schemas import HomeMarket, HomeResponse, Leaderboard
+from app.services.ranking import get_top_deals, get_total_offer_count
 
 router = APIRouter()
 
@@ -55,6 +55,9 @@ async def get_home(
     # Get ranked deals from service (handles filtering by minTrust)
     deals = await get_top_deals(sku_key=sku, min_trust=min_trust, limit=10)
 
+    # Get total offer count (before filtering)
+    total_count = await get_total_offer_count(sku_key=sku)
+
     # Determine global winner (first deal after ranking)
     global_winner_id = deals[0].offer_id if deals else ""
 
@@ -76,7 +79,7 @@ async def get_home(
         global_winner_offer_id=global_winner_id,
         leaderboard=Leaderboard(
             deals=deals,
-            match_count=len(deals),  # Will be total pre-filter count from DB
+            match_count=total_count,
             last_updated_at=datetime.now(timezone.utc),
         ),
     )

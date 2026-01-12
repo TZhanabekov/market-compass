@@ -13,29 +13,45 @@ Cost control:
 - Lock per offerId to prevent duplicate calls
 """
 
-# Mock merchant URLs for initial implementation
-# Will be replaced with actual DB/Redis/SerpAPI integration
-_MOCK_MERCHANT_URLS = {
-    "offer_jp_1": "https://www.biccamera.com/bc/item/10112345/",
-    "offer_us_1": "https://www.apple.com/shop/buy-iphone/iphone-16-pro",
-    "offer_hk_1": "https://www.fortress.com.hk/en/product/iphone-16-pro",
-    "offer_ae_1": "https://www.sharafdg.com/product/iphone-16-pro",
-}
+import os
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-# Fallback Google Shopping links
-_MOCK_FALLBACK_URLS = {
-    "offer_jp_1": "https://www.google.com/shopping/product/123?hl=en",
-    "offer_us_1": "https://www.google.com/shopping/product/456?hl=en",
-}
+from app.models import Offer
+
+# Database connection
+_engine = None
+_session_factory = None
+
+
+def _get_database_url() -> str:
+    """Get database URL from environment."""
+    return os.getenv(
+        "DATABASE_URL",
+        "postgresql+asyncpg://postgres:postgres@localhost:5433/market_compass",
+    )
+
+
+async def _get_session() -> AsyncSession:
+    """Get database session."""
+    global _engine, _session_factory
+
+    if _engine is None:
+        _engine = create_async_engine(_get_database_url(), echo=False)
+        _session_factory = async_sessionmaker(
+            _engine, class_=AsyncSession, expire_on_commit=False
+        )
+
+    return _session_factory()
 
 
 async def get_merchant_url(offer_id: str) -> str | None:
     """Get merchant URL for an offer, with lazy hydration.
 
     Priority:
-    1. Redis cache (fast)
+    1. Redis cache (fast) - TODO: implement
     2. PostgreSQL (persisted)
-    3. SerpAPI hydration (expensive, cached after)
+    3. SerpAPI hydration (expensive, cached after) - TODO: implement
 
     Args:
         offer_id: The offer identifier.
@@ -43,18 +59,27 @@ async def get_merchant_url(offer_id: str) -> str | None:
     Returns:
         Merchant URL if found, None otherwise.
     """
-    # TODO: Implement actual cache/DB/SerpAPI logic
-    # For now, return mock data
+    session = await _get_session()
 
-    # Check mock merchant URLs
-    if offer_id in _MOCK_MERCHANT_URLS:
-        return _MOCK_MERCHANT_URLS[offer_id]
+    try:
+        # Query offer from database
+        result = await session.execute(
+            select(Offer).where(Offer.offer_id == offer_id)
+        )
+        offer = result.scalar_one_or_none()
 
-    # Check fallback URLs
-    if offer_id in _MOCK_FALLBACK_URLS:
-        return _MOCK_FALLBACK_URLS[offer_id]
+        if not offer:
+            return None
 
-    return None
+        # If merchant_url exists, return it
+        if offer.merchant_url:
+            return offer.merchant_url
+
+        # Fallback to product_link (Google Shopping link)
+        return offer.product_link
+
+    finally:
+        await session.close()
 
 
 async def hydrate_merchant_url(offer_id: str, immersive_token: str) -> str | None:
