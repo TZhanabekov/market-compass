@@ -39,13 +39,15 @@ target_metadata = Base.metadata
 def get_url() -> str:
     """Get database URL from environment.
 
-    Converts asyncpg URL to standard postgresql URL for Alembic.
+    Converts Railway's postgresql:// URL to postgresql+asyncpg:// for async migrations.
     """
     url = os.getenv(
         "DATABASE_URL",
         "postgresql+asyncpg://postgres:postgres@localhost:5433/market_compass",
     )
-    # Alembic needs async URL for async migrations
+    # Railway provides postgresql:// but we need postgresql+asyncpg:// for async
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
     return url
 
 

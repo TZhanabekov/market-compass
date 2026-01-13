@@ -27,6 +27,17 @@ class Settings(BaseSettings):
     # Database (PostgreSQL)
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/market_compass"
 
+    @property
+    def async_database_url(self) -> str:
+        """Get database URL with asyncpg driver.
+
+        Railway provides postgresql:// but we need postgresql+asyncpg:// for async.
+        """
+        url = self.database_url
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
