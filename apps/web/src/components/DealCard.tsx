@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, AlertTriangle, ArrowRight, MapPin, Plane, Cpu, Check } from "lucide-react";
-import { Deal, LOCAL_MARKET_DATA } from "@/data/mockData";
+import type { Deal, HomeMarket } from "@/lib/api";
 import { TrustMeter } from "./TrustMeter";
 import { AnimatedNumber } from "./AnimatedNumber";
 
@@ -11,6 +11,7 @@ interface DealCardProps {
   deal: Deal;
   index: number;
   minTrust: number;
+  homeMarket: HomeMarket;
 }
 
 // Icon mapping for guide steps
@@ -25,11 +26,11 @@ const getGuideIcon = (iconName: string) => {
   return icons[iconName] || <MapPin className="w-4 h-4 text-primary" />;
 };
 
-export const DealCard = ({ deal, index, minTrust }: DealCardProps) => {
+export const DealCard = ({ deal, index, minTrust, homeMarket }: DealCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   
   // Calculate savings relative to local market price
-  const savingsUsd = LOCAL_MARKET_DATA.iphone16pro_price_usd - deal.finalEffectivePrice;
+  const savingsUsd = homeMarket.localPriceUsd - deal.finalEffectivePrice;
   
   // Filter out deals below trust threshold
   if (deal.trustScore < minTrust) return null;
@@ -121,7 +122,7 @@ export const DealCard = ({ deal, index, minTrust }: DealCardProps) => {
             <div className="pt-4 mt-4 border-t titanium-border border-x-0 border-b-0 space-y-4">
               {/* Savings Header */}
               <div className="flex items-center justify-between p-3 rounded-xl bg-success/10 border border-success/30">
-                <span className="text-sm text-foreground font-medium">Potential Savings vs {LOCAL_MARKET_DATA.country}</span>
+                <span className="text-sm text-foreground font-medium">Potential Savings vs {homeMarket.country}</span>
                 <span className="text-lg font-bold text-success">
                   $<AnimatedNumber value={savingsUsd} />
                 </span>

@@ -2,19 +2,20 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ArrowRight, Smartphone, Shield, Check, Minus, CreditCard } from "lucide-react";
-import { Deal, LOCAL_MARKET_DATA } from "@/data/mockData";
+import type { Deal, HomeMarket } from "@/lib/api";
 import { AnimatedNumber } from "./AnimatedNumber";
 
 interface ComparisonModalProps {
   isOpen: boolean;
   onClose: () => void;
   deal: Deal;
+  homeMarket: HomeMarket;
   onViewDeal: () => void;
 }
 
-export const ComparisonModal = ({ isOpen, onClose, deal, onViewDeal }: ComparisonModalProps) => {
-  const savings = LOCAL_MARKET_DATA.iphone16pro_price_usd - deal.finalEffectivePrice;
-  const savingsPercent = Math.round((savings / LOCAL_MARKET_DATA.iphone16pro_price_usd) * 100);
+export const ComparisonModal = ({ isOpen, onClose, deal, homeMarket, onViewDeal }: ComparisonModalProps) => {
+  const savings = homeMarket.localPriceUsd - deal.finalEffectivePrice;
+  const savingsPercent = Math.round((savings / homeMarket.localPriceUsd) * 100);
 
   return (
     <AnimatePresence>
@@ -49,7 +50,7 @@ export const ComparisonModal = ({ isOpen, onClose, deal, onViewDeal }: Compariso
                   Arbitrage Analysis
                 </h2>
                 <p className="text-sm text-titanium">
-                  {LOCAL_MARKET_DATA.country} vs. {deal.country}
+                  {homeMarket.country} vs. {deal.country}
                 </p>
               </div>
               <motion.button
@@ -75,7 +76,7 @@ export const ComparisonModal = ({ isOpen, onClose, deal, onViewDeal }: Compariso
                 <div className="grid grid-cols-3 gap-2 mb-3 pb-3 border-b titanium-border border-x-0 border-t-0">
                   <div className="text-xs text-titanium"></div>
                   <div className="text-xs text-titanium text-center font-medium">
-                    Local ({LOCAL_MARKET_DATA.country})
+                    Local ({homeMarket.country})
                   </div>
                   <div className="text-xs text-primary text-center font-medium">
                     Target ({deal.country})
@@ -86,7 +87,7 @@ export const ComparisonModal = ({ isOpen, onClose, deal, onViewDeal }: Compariso
                 <div className="grid grid-cols-3 gap-2 py-3 border-b titanium-border border-x-0 border-t-0">
                   <div className="text-sm text-titanium">Retail Price</div>
                   <div className="text-sm text-foreground text-center font-medium">
-                    ${LOCAL_MARKET_DATA.iphone16pro_price_usd}
+                    ${homeMarket.localPriceUsd}
                   </div>
                   <div className="text-sm text-foreground text-center font-medium">
                     ${deal.priceUsd}
@@ -108,7 +109,7 @@ export const ComparisonModal = ({ isOpen, onClose, deal, onViewDeal }: Compariso
                 <div className="grid grid-cols-3 gap-2 py-3">
                   <div className="text-sm font-semibold text-foreground">Effective Price</div>
                   <div className="text-base text-foreground text-center font-bold">
-                    ${LOCAL_MARKET_DATA.iphone16pro_price_usd}
+                    ${homeMarket.localPriceUsd}
                   </div>
                   <div className="text-base text-success text-center font-bold">
                     $<AnimatedNumber value={deal.finalEffectivePrice} />
@@ -135,7 +136,7 @@ export const ComparisonModal = ({ isOpen, onClose, deal, onViewDeal }: Compariso
                 <div className="grid grid-cols-3 gap-2 mb-3 pb-3 border-b titanium-border border-x-0 border-t-0">
                   <div className="text-xs text-titanium"></div>
                   <div className="text-xs text-titanium text-center font-medium">
-                    Local ({LOCAL_MARKET_DATA.country})
+                    Local ({homeMarket.country})
                   </div>
                   <div className="text-xs text-primary text-center font-medium">
                     Target ({deal.country})
@@ -149,7 +150,7 @@ export const ComparisonModal = ({ isOpen, onClose, deal, onViewDeal }: Compariso
                     SIM Type
                   </div>
                   <div className="text-xs text-foreground text-center">
-                    {LOCAL_MARKET_DATA.simType}
+                    {homeMarket.simType}
                   </div>
                   <div className="text-xs text-foreground text-center">
                     {deal.simType}
@@ -163,7 +164,7 @@ export const ComparisonModal = ({ isOpen, onClose, deal, onViewDeal }: Compariso
                     Warranty
                   </div>
                   <div className="text-xs text-foreground text-center">
-                    {LOCAL_MARKET_DATA.warranty}
+                    {homeMarket.warranty}
                   </div>
                   <div className="text-xs text-foreground text-center">
                     {deal.warranty}
@@ -173,7 +174,7 @@ export const ComparisonModal = ({ isOpen, onClose, deal, onViewDeal }: Compariso
                 {/* SIM Compatibility Check */}
                 <div className="mt-4 p-3 rounded-xl bg-surface-1 titanium-border">
                   <div className="flex items-center gap-2">
-                    {deal.simType === LOCAL_MARKET_DATA.simType ? (
+                    {deal.simType === homeMarket.simType ? (
                       <>
                         <Check className="w-4 h-4 text-success" />
                         <span className="text-xs text-titanium">SIM type matches your local model</span>

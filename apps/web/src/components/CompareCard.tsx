@@ -2,17 +2,20 @@
 
 import { motion } from "framer-motion";
 import { ArrowRight, TrendingDown } from "lucide-react";
-import { LOCAL_MARKET_DATA, MOCK_DEALS } from "@/data/mockData";
+import type { Deal, HomeMarket } from "@/lib/api";
 import { AnimatedNumber } from "./AnimatedNumber";
 
 interface CompareCardProps {
   onCompareClick: () => void;
+  homeMarket: HomeMarket;
+  bestDeal?: Deal;
 }
 
-export const CompareCard = ({ onCompareClick }: CompareCardProps) => {
-  const bestDeal = MOCK_DEALS[0];
-  const savings = LOCAL_MARKET_DATA.iphone16pro_price_usd - bestDeal.finalEffectivePrice;
-  const savingsPercent = Math.round((savings / LOCAL_MARKET_DATA.iphone16pro_price_usd) * 100);
+export const CompareCard = ({ onCompareClick, homeMarket, bestDeal }: CompareCardProps) => {
+  if (!bestDeal) return null;
+
+  const savings = homeMarket.localPriceUsd - bestDeal.finalEffectivePrice;
+  const savingsPercent = Math.round((savings / homeMarket.localPriceUsd) * 100);
 
   return (
     <motion.div
@@ -51,10 +54,10 @@ export const CompareCard = ({ onCompareClick }: CompareCardProps) => {
           {/* Local Market */}
           <div className="flex-1 text-center p-3 rounded-xl bg-surface-1 titanium-border">
             <div className="text-xs text-titanium mb-1">
-              {LOCAL_MARKET_DATA.country}
+              {homeMarket.country}
             </div>
             <div className="text-lg font-bold text-titanium">
-              ${LOCAL_MARKET_DATA.iphone16pro_price_usd}
+              ${homeMarket.localPriceUsd}
             </div>
           </div>
 

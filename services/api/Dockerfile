@@ -40,8 +40,14 @@ COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/* \
     && rm -rf /wheels
 
-# Copy application code
+# Copy application code, scripts, and alembic
 COPY app ./app
+COPY scripts ./scripts
+COPY alembic.ini ./
+COPY alembic ./alembic
+
+# Make startup script executable
+RUN chmod +x scripts/start.sh
 
 # Set ownership
 RUN chown -R appuser:appuser /app
@@ -62,5 +68,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8080/health').raise_for_status()"
 
-# Run with uvicorn (PORT is set by Railway)
-CMD ["sh", "-c", "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+# Run startup script (handles migrations + server)
+CMD ["./scripts/start.sh"]

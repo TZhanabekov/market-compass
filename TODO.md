@@ -184,9 +184,12 @@ services/
 | 1 | ~~Запустить docker-compose, проверить API~~ ✅ | Done |
 | 2 | ~~Настроить Alembic миграции~~ ✅ | Done |
 | 3 | ~~Seed данные для Golden SKU + iPhone 16 Pro~~ ✅ | Done |
-| 4 | Подключить фронтенд к API (react-query) | 🔴 High |
-| 5 | Настроить Neon/Supabase PostgreSQL (production) | 🟡 Medium |
-| 6 | Настроить Upstash Redis (production) | 🟡 Medium |
+| 4 | ~~Подключить фронтенд к API (react-query)~~ ✅ | Done |
+| 5 | ~~Настроить Railway deployment~~ ✅ | Done |
+| 6 | Запустить миграции на Railway (вручную или AUTO_MIGRATE=true) | 🟡 Medium |
+| 7 | Настроить Neon/Supabase PostgreSQL (production) | 🟡 Medium |
+| 8 | Настроить Upstash Redis (production) | 🟡 Medium |
+| 9 | Настроить NEXT_PUBLIC_API_URL для production (Railway URL) | 🟡 Medium |
 
 ---
 

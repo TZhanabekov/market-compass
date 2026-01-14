@@ -1,15 +1,48 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MOCK_DEALS } from "@/data/mockData";
 import { DealCard } from "./DealCard";
+import type { Deal, HomeMarket } from "@/lib/api";
 
 interface LeaderboardProps {
   minTrust: number;
+  deals: Deal[];
+  matchCount: number;
+  homeMarket: HomeMarket;
+  isLoading?: boolean;
+  error?: Error | null;
 }
 
-export const Leaderboard = ({ minTrust }: LeaderboardProps) => {
-  const filteredDeals = MOCK_DEALS.filter(deal => deal.trustScore >= minTrust);
+export const Leaderboard = ({ 
+  minTrust, 
+  deals, 
+  matchCount,
+  homeMarket,
+  isLoading,
+  error 
+}: LeaderboardProps) => {
+  // Filter deals by trust score (API already filters, but we do it client-side too for UI consistency)
+  const filteredDeals = deals.filter(deal => deal.trustScore >= minTrust);
+
+  if (isLoading) {
+    return (
+      <section className="px-4 pb-32">
+        <div className="text-center py-12">
+          <p className="text-titanium">Loading deals...</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="px-4 pb-32">
+        <div className="text-center py-12">
+          <p className="text-warning">Failed to load deals. Please try again later.</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="px-4 pb-32">
@@ -23,17 +56,18 @@ export const Leaderboard = ({ minTrust }: LeaderboardProps) => {
           Top 10 Global Deals
         </h2>
         <span className="text-xs text-titanium titanium-border px-2 py-1 rounded-full">
-          {filteredDeals.length} matches
+          {matchCount} matches
         </span>
       </motion.div>
 
       <div className="space-y-3">
-        {MOCK_DEALS.map((deal, index) => (
+        {filteredDeals.map((deal, index) => (
           <DealCard 
-            key={deal.rank} 
+            key={deal.offerId} 
             deal={deal} 
             index={index}
             minTrust={minTrust}
+            homeMarket={homeMarket}
           />
         ))}
       </div>

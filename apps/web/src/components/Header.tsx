@@ -4,11 +4,15 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { MapPin, ChevronDown } from "lucide-react";
 import { LocationModal } from "./LocationModal";
-import { LOCAL_MARKET_DATA } from "@/data/mockData";
+import type { HomeMarket } from "@/lib/api";
 
-export const Header = () => {
+interface HeaderProps {
+  homeMarket?: HomeMarket;
+}
+
+export const Header = ({ homeMarket }: HeaderProps) => {
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState(LOCAL_MARKET_DATA.country);
+  const [currentLocation, setCurrentLocation] = useState(homeMarket?.country || "Germany");
 
   return (
     <>
@@ -41,9 +45,11 @@ export const Header = () => {
               <span className="text-sm text-titanium">
                 <span className="hidden sm:inline">📍 Sensed: </span>
                 <span className="text-foreground font-medium">{currentLocation}</span>
-                <span className="text-titanium ml-1.5 hidden sm:inline">
-                  • Local: <span className="text-foreground font-medium">${LOCAL_MARKET_DATA.iphone16pro_price_usd}</span>
-                </span>
+                {homeMarket && (
+                  <span className="text-titanium ml-1.5 hidden sm:inline">
+                    • Local: <span className="text-foreground font-medium">${homeMarket.localPriceUsd}</span>
+                  </span>
+                )}
               </span>
               <ChevronDown className="w-4 h-4 text-titanium" />
             </motion.button>
