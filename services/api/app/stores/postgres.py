@@ -34,6 +34,7 @@ async def init_db() -> None:
     _engine = create_async_engine(
         settings.async_database_url,
         echo=settings.debug,
+        connect_args=settings.asyncpg_connect_args,
         pool_size=5,
         max_overflow=10,
         pool_pre_ping=True,

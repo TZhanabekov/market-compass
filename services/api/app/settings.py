@@ -1,8 +1,22 @@
 """Application settings via Pydantic Settings."""
 
 from functools import lru_cache
+from urllib.parse import urlparse
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _asyncpg_connect_args_from_url(database_url: str) -> dict[str, object]:
+    """
+    Compute asyncpg connect_args based on DATABASE_URL.
+
+    Railway Postgres uses an internal hostname (e.g. postgres.railway.internal)
+    that rejects SSL negotiation. In that case we must explicitly disable SSL.
+    """
+    host = urlparse(database_url).hostname or ""
+    if host.endswith(".railway.internal"):
+        return {"ssl": False}
+    return {}
 
 
 class Settings(BaseSettings):
@@ -37,6 +51,11 @@ class Settings(BaseSettings):
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
         return url
+
+    @property
+    def asyncpg_connect_args(self) -> dict[str, object]:
+        """Extra connect args for asyncpg (e.g. Railway SSL quirks)."""
+        return _asyncpg_connect_args_from_url(self.async_database_url)
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"

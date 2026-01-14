@@ -7,13 +7,14 @@ Loads database URL from environment variable DATABASE_URL.
 import asyncio
 import os
 import sys
+from urllib.parse import urlparse
 from logging.config import fileConfig
 
 from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import create_async_engine
 
 # Add app to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -84,13 +85,17 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with async engine."""
-    configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = get_url()
+    url = get_url()
+    host = urlparse(url).hostname or ""
+    connect_args: dict[str, object] = {}
+    # Railway internal Postgres rejects SSL negotiation; disable SSL explicitly.
+    if host.endswith(".railway.internal"):
+        connect_args = {"ssl": False}
 
-    connectable = async_engine_from_config(
-        configuration,
-        prefix="sqlalchemy.",
+    connectable = create_async_engine(
+        url,
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:

@@ -32,7 +32,11 @@ async def _get_session() -> AsyncSession:
 
     if _engine is None:
         settings = get_settings()
-        _engine = create_async_engine(settings.async_database_url, echo=settings.debug)
+        _engine = create_async_engine(
+            settings.async_database_url,
+            echo=settings.debug,
+            connect_args=settings.asyncpg_connect_args,
+        )
         _session_factory = async_sessionmaker(
             _engine, class_=AsyncSession, expire_on_commit=False
         )
