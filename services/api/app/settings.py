@@ -15,7 +15,9 @@ def _asyncpg_connect_args_from_url(database_url: str) -> dict[str, object]:
     """
     host = urlparse(database_url).hostname or ""
     if host.endswith(".railway.internal"):
-        return {"ssl": False}
+        # Internal Railway Postgres rejects SSL negotiation; also add a timeout
+        # because the DB may not be ready at container start.
+        return {"ssl": False, "timeout": 20}
     return {}
 
 

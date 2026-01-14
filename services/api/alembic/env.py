@@ -90,7 +90,7 @@ async def run_async_migrations() -> None:
     connect_args: dict[str, object] = {}
     # Railway internal Postgres rejects SSL negotiation; disable SSL explicitly.
     if host.endswith(".railway.internal"):
-        connect_args = {"ssl": False}
+        connect_args = {"ssl": False, "timeout": 20}
 
     connectable = create_async_engine(
         url,
