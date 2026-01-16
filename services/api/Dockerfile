@@ -32,6 +32,7 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
     libpq5 \
     && rm -rf /var/lib/apt/lists/*
 

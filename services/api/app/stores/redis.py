@@ -14,6 +14,7 @@ TTL policies:
 """
 
 import json
+import logging
 from typing import Any
 
 import redis.asyncio as redis
@@ -36,6 +37,7 @@ PREFIX_LOCK = "lock:"
 
 # Redis client (initialized on startup)
 _redis: redis.Redis | None = None
+logger = logging.getLogger(__name__)
 
 
 async def init_redis() -> None:
@@ -46,7 +48,12 @@ async def init_redis() -> None:
         settings.redis_url,
         encoding="utf-8",
         decode_responses=True,
+        socket_connect_timeout=5,
+        socket_timeout=5,
     )
+    # Validate connectivity early (especially for `rediss://` in production).
+    await _redis.ping()
+    logger.info("Redis connected")
 
 
 async def close_redis() -> None:
