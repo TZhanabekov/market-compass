@@ -23,6 +23,8 @@ Backend env:
 - `DATABASE_URL`
 - `REDIS_URL`
 - `SERPAPI_API_KEY`
+- `SERPAPI_DEBUG` (set `true` to log full SerpAPI response JSON for debugging)
+- `OPENEXCHANGERATES_KEY` (for currency conversion)
 - `OPENAI_API_KEY` (for guides generation)
 - `CORS_ORIGINS` (CORS; also accepts `ALLOWED_ORIGINS` for backward compatibility)
 - `AUTO_MIGRATE` (set `true` on Railway to run Alembic on deploy/start)
@@ -43,6 +45,8 @@ Backend env:
   - `DATABASE_URL` (Railway Postgres)
   - `REDIS_URL` (Upstash or Railway Redis)
   - `SERPAPI_API_KEY`
+  - `SERPAPI_DEBUG` (optional; set `true` for debugging SerpAPI responses)
+  - `OPENEXCHANGERATES_KEY` (for currency conversion)
   - `OPENAI_API_KEY`
   - `CORS_ORIGINS=["https://app.example.com"]`
   - `AUTO_MIGRATE=true`

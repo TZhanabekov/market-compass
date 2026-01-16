@@ -144,6 +144,15 @@ class SerpAPIClient:
         response.raise_for_status()
 
         data = response.json()
+
+        # Debug logging: log full API response if enabled
+        settings = get_settings()
+        if settings.serpapi_debug:
+            logger.info(
+                f"SerpAPI shopping response (query={query}, gl={gl}):\n"
+                f"{json.dumps(data, indent=2, ensure_ascii=False)}"
+            )
+
         results = self._parse_shopping_results(data, gl=gl)
 
         # Cache results
@@ -223,6 +232,15 @@ class SerpAPIClient:
             return None
 
         data = response.json()
+
+        # Debug logging: log full API response if enabled
+        settings = get_settings()
+        if settings.serpapi_debug:
+            logger.info(
+                f"SerpAPI immersive response (product_id={product_id}):\n"
+                f"{json.dumps(data, indent=2, ensure_ascii=False)}"
+            )
+
         result = self._parse_immersive_result(data, product_id)
 
         # Cache result

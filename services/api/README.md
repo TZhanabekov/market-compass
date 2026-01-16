@@ -98,6 +98,7 @@ services/api/
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins |
 | `AUTO_MIGRATE` | `false` | Run `alembic upgrade head` on start/deploy |
 | `SERPAPI_API_KEY` | `` | SerpAPI key (optional; also accepts `SERPAPI_KEY`) |
+| `SERPAPI_DEBUG` | `false` | Log full SerpAPI response JSON for debugging |
 
 ## Railway Deployment
 

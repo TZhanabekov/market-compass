@@ -99,10 +99,14 @@ class Settings(BaseSettings):
             return [part.strip() for part in s.split(",") if part.strip()]
         return [str(v).strip()] if str(v).strip() else []
 
-    # SerpAPI (for future use)
+    # SerpAPI
     serpapi_key: str = Field(
         default="",
         validation_alias=AliasChoices("SERPAPI_API_KEY", "SERPAPI_KEY"),
+    )
+    serpapi_debug: bool = Field(
+        default=False,
+        description="If True, log full SerpAPI response JSON for debugging",
     )
 
     # OpenExchangeRates (for future use)
