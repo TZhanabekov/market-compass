@@ -71,7 +71,7 @@ class Offer(Base):
     # URLs
     product_link: Mapped[str] = mapped_column(Text)  # Google Shopping link
     merchant_url: Mapped[str | None] = mapped_column(Text)  # Direct merchant link
-    immersive_token: Mapped[str | None] = mapped_column(String(200))  # For lazy hydration
+    immersive_token: Mapped[str | None] = mapped_column(Text)  # SerpAPI immersive token (can be very long)
 
     # Guide steps (JSON array)
     guide_steps_json: Mapped[str | None] = mapped_column(Text)
