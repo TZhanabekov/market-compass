@@ -34,6 +34,7 @@ from app.stores.redis import (
     TTL_SHOPPING_CACHE,
     TTL_IMMERSIVE_CACHE,
 )
+from app.services.debug_storage import save_shopping_response, save_immersive_response
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -145,13 +146,18 @@ class SerpAPIClient:
 
         data = response.json()
 
-        # Debug logging: log full API response if enabled
+        # Debug: save to file if enabled (instead of logging huge JSON)
         settings = get_settings()
         if settings.serpapi_debug:
-            logger.info(
-                f"SerpAPI shopping response (query={query}, gl={gl}):\n"
-                f"{json.dumps(data, indent=2, ensure_ascii=False)}"
-            )
+            filename = save_shopping_response(query=query, gl=gl, data=data)
+            if filename:
+                logger.info(f"SerpAPI shopping response saved to debug file: {filename}")
+            else:
+                # Fallback to logging if file save failed
+                logger.info(
+                    f"SerpAPI shopping response (query={query}, gl={gl}):\n"
+                    f"{json.dumps(data, indent=2, ensure_ascii=False)}"
+                )
 
         results = self._parse_shopping_results(data, gl=gl)
 
@@ -233,13 +239,18 @@ class SerpAPIClient:
 
         data = response.json()
 
-        # Debug logging: log full API response if enabled
+        # Debug: save to file if enabled (instead of logging huge JSON)
         settings = get_settings()
         if settings.serpapi_debug:
-            logger.info(
-                f"SerpAPI immersive response (product_id={product_id}):\n"
-                f"{json.dumps(data, indent=2, ensure_ascii=False)}"
-            )
+            filename = save_immersive_response(product_id=product_id, data=data)
+            if filename:
+                logger.info(f"SerpAPI immersive response saved to debug file: {filename}")
+            else:
+                # Fallback to logging if file save failed
+                logger.info(
+                    f"SerpAPI immersive response (product_id={product_id}):\n"
+                    f"{json.dumps(data, indent=2, ensure_ascii=False)}"
+                )
 
         result = self._parse_immersive_result(data, product_id)
 

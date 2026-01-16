@@ -5,6 +5,7 @@ In production, consider adding authentication (API key or admin token).
 """
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.models import GoldenSku
@@ -16,6 +17,7 @@ from app.services.ingestion import (
     COUNTRY_GL_MAP,
 )
 from app.services.attribute_extractor import ExtractionConfidence
+from app.services.debug_storage import list_debug_files, get_debug_file
 from app.stores.postgres import get_session
 from sqlalchemy import select
 
@@ -258,3 +260,34 @@ async def list_golden_skus(limit: int = Query(default=50, le=100)) -> dict:
                 for sku in skus
             ],
         }
+
+
+# ============================================================
+# Debug: SerpAPI Response Files
+# ============================================================
+
+
+@router.get("/debug/serpapi")
+async def list_serpapi_debug_files(limit: int = Query(default=50, le=100)) -> dict:
+    """List saved SerpAPI debug response files.
+
+    Files are saved when SERPAPI_DEBUG=true is enabled.
+    """
+    files = list_debug_files(limit=limit)
+    return {
+        "count": len(files),
+        "files": files,
+    }
+
+
+@router.get("/debug/serpapi/{filename}")
+async def get_serpapi_debug_file(filename: str) -> JSONResponse:
+    """Get SerpAPI debug response file content.
+
+    Returns JSON response with full API data.
+    """
+    content = get_debug_file(filename)
+    if not content:
+        raise HTTPException(status_code=404, detail=f"Debug file not found: {filename}")
+
+    return JSONResponse(content=content)
