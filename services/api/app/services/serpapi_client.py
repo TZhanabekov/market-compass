@@ -143,7 +143,7 @@ class SerpAPIClient:
         response.raise_for_status()
 
         data = response.json()
-        results = self._parse_shopping_results(data)
+        results = self._parse_shopping_results(data, gl=gl)
 
         # Cache results
         if use_cache and results:
@@ -234,18 +234,21 @@ class SerpAPIClient:
 
         return result
 
-    def _parse_shopping_results(self, data: dict[str, Any]) -> list[ShoppingResult]:
+    def _parse_shopping_results(self, data: dict[str, Any], gl: str = "us") -> list[ShoppingResult]:
         """Parse google_shopping API response."""
         results: list[ShoppingResult] = []
 
         shopping_results = data.get("shopping_results", [])
         for item in shopping_results:
             try:
+                # Extract currency from multiple sources
+                currency = self._extract_currency(item, gl)
+
                 result = ShoppingResult(
                     product_id=item.get("product_id", ""),
                     title=item.get("title", ""),
                     price=self._parse_price(item.get("extracted_price", 0)),
-                    currency=item.get("currency", "USD"),
+                    currency=currency,
                     merchant=item.get("source", ""),
                     product_link=item.get("product_link", ""),
                     immersive_token=item.get("serpapi_product_api", ""),
@@ -257,6 +260,113 @@ class SerpAPIClient:
                 continue
 
         return results
+
+    def _extract_currency(self, item: dict[str, Any], gl: str = "us") -> str:
+        """Extract currency from SerpAPI shopping result.
+
+        Tries multiple sources:
+        1. item.currency (direct field)
+        2. alternative_price.currency
+        3. Parse from price string (¥, $, €, etc.)
+        4. Infer from gl parameter (gl=jp → JPY, gl=de → EUR, etc.)
+
+        Args:
+            item: Shopping result item from SerpAPI.
+            gl: Google country code (e.g., "jp", "us", "de").
+
+        Returns:
+            Currency code (e.g., "JPY", "USD", "EUR").
+        """
+        # 1. Direct currency field
+        currency = item.get("currency")
+        if currency:
+            return str(currency).upper()
+
+        # 2. Alternative price currency
+        alt_price = item.get("alternative_price", {})
+        if isinstance(alt_price, dict):
+            alt_currency = alt_price.get("currency")
+            if alt_currency:
+                return str(alt_currency).upper()
+
+        # 3. Parse from price string
+        price_str = item.get("price", "")
+        if isinstance(price_str, str):
+            currency_from_symbol = self._currency_from_symbol(price_str)
+            if currency_from_symbol:
+                return currency_from_symbol
+
+        # 4. Infer from gl parameter
+        return self._currency_from_gl(gl)
+
+    def _currency_from_symbol(self, price_str: str) -> str | None:
+        """Extract currency code from price string with symbol.
+
+        Examples:
+            "¥159,800" → "JPY"
+            "$1,099" → "USD"
+            "€1,229" → "EUR"
+            "£999" → "GBP"
+        """
+        if not price_str:
+            return None
+
+        # Currency symbol mapping
+        symbol_map = {
+            "¥": "JPY",
+            "$": "USD",
+            "€": "EUR",
+            "£": "GBP",
+            "HK$": "HKD",
+            "S$": "SGD",
+            "A$": "AUD",
+            "₩": "KRW",
+            "AED": "AED",
+        }
+
+        # Check for multi-character symbols first (HK$, S$, A$)
+        for symbol, code in symbol_map.items():
+            if len(symbol) > 1 and price_str.startswith(symbol):
+                return code
+
+        # Check single-character symbols
+        first_char = price_str[0]
+        return symbol_map.get(first_char)
+
+    def _currency_from_gl(self, gl: str) -> str:
+        """Infer currency from Google country code (gl parameter).
+
+        Args:
+            gl: Google country code (e.g., "jp", "us", "de").
+
+        Returns:
+            Default currency code for that country.
+        """
+        gl_lower = gl.lower()
+        gl_to_currency = {
+            "jp": "JPY",
+            "us": "USD",
+            "uk": "GBP",
+            "gb": "GBP",
+            "de": "EUR",
+            "fr": "EUR",
+            "it": "EUR",
+            "es": "EUR",
+            "nl": "EUR",
+            "be": "EUR",
+            "at": "EUR",
+            "hk": "HKD",
+            "ae": "AED",
+            "sg": "SGD",
+            "kr": "KRW",
+            "au": "AUD",
+            "ca": "CAD",
+            "mx": "MXN",
+            "br": "BRL",
+            "in": "INR",
+            "cn": "CNY",
+        }
+        return gl_to_currency.get(gl_lower, "USD")
 
     def _parse_immersive_result(
         self, data: dict[str, Any], product_id: str
