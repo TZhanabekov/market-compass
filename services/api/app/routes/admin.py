@@ -7,6 +7,8 @@ In production, consider adding authentication (API key or admin token).
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from app.models import GoldenSku
+from app.services.dedup import compute_sku_key
 from app.services.ingestion import (
     IngestionConfig,
     IngestionStats,
@@ -14,6 +16,8 @@ from app.services.ingestion import (
     COUNTRY_GL_MAP,
 )
 from app.services.attribute_extractor import ExtractionConfidence
+from app.stores.postgres import get_session
+from sqlalchemy import select
 
 router = APIRouter()
 
@@ -105,3 +109,152 @@ async def get_supported_countries() -> dict:
         "countries": list(COUNTRY_GL_MAP.keys()),
         "default": "US",
     }
+
+
+# ============================================================
+# Golden SKU Management
+# ============================================================
+
+
+class CreateSkuRequest(BaseModel):
+    """Request body for creating a Golden SKU."""
+
+    model: str  # e.g., "iphone-16-pro"
+    storage: str  # e.g., "256gb"
+    color: str  # e.g., "black"
+    condition: str = "new"  # "new", "refurbished", "used"
+    sim_variant: str | None = None
+    lock_state: str | None = None
+    region_variant: str | None = None
+    display_name: str | None = None  # Auto-generated if not provided
+    msrp_usd: float | None = None
+
+
+class SkuResponse(BaseModel):
+    """Response from SKU creation endpoint."""
+
+    success: bool
+    sku_key: str
+    message: str
+
+
+@router.post("/skus", response_model=SkuResponse)
+async def create_golden_sku(request: CreateSkuRequest) -> SkuResponse:
+    """Create a new Golden SKU.
+
+    This endpoint creates a canonical SKU that can be used for ingestion.
+    The sku_key is computed automatically from attributes.
+
+    Args:
+        request: SKU attributes.
+
+    Returns:
+        Created SKU key and status.
+    """
+    # Compute SKU key
+    attrs = {
+        "model": request.model,
+        "storage": request.storage,
+        "color": request.color,
+        "condition": request.condition,
+    }
+    if request.sim_variant:
+        attrs["sim_variant"] = request.sim_variant
+    if request.lock_state:
+        attrs["lock_state"] = request.lock_state
+    if request.region_variant:
+        attrs["region_variant"] = request.region_variant
+
+    sku_key = compute_sku_key(attrs)
+
+    # Generate display name if not provided
+    display_name = request.display_name
+    if not display_name:
+        model_display = request.model.replace("-", " ").title()
+        storage_display = request.storage.upper()
+        color_display = request.color.title()
+        display_name = f"{model_display} {storage_display} {color_display}"
+
+    async with get_session() as session:
+        # Check if exists
+        result = await session.execute(
+            select(GoldenSku).where(GoldenSku.sku_key == sku_key)
+        )
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            return SkuResponse(
+                success=True,
+                sku_key=sku_key,
+                message=f"Golden SKU already exists: {sku_key}",
+            )
+
+        # Create new SKU
+        sku = GoldenSku(
+            sku_key=sku_key,
+            model=request.model,
+            storage=request.storage,
+            color=request.color,
+            condition=request.condition,
+            sim_variant=request.sim_variant,
+            lock_state=request.lock_state,
+            region_variant=request.region_variant,
+            display_name=display_name,
+            msrp_usd=request.msrp_usd,
+        )
+        session.add(sku)
+        await session.commit()
+
+        return SkuResponse(
+            success=True,
+            sku_key=sku_key,
+            message=f"Golden SKU created: {sku_key}",
+        )
+
+
+@router.get("/skus/{sku_key}")
+async def get_golden_sku(sku_key: str) -> dict:
+    """Get Golden SKU by key."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(GoldenSku).where(GoldenSku.sku_key == sku_key)
+        )
+        sku = result.scalar_one_or_none()
+
+        if not sku:
+            raise HTTPException(status_code=404, detail=f"Golden SKU not found: {sku_key}")
+
+        return {
+            "sku_key": sku.sku_key,
+            "model": sku.model,
+            "storage": sku.storage,
+            "color": sku.color,
+            "condition": sku.condition,
+            "display_name": sku.display_name,
+            "msrp_usd": sku.msrp_usd,
+            "created_at": sku.created_at.isoformat() if sku.created_at else None,
+        }
+
+
+@router.get("/skus")
+async def list_golden_skus(limit: int = Query(default=50, le=100)) -> dict:
+    """List all Golden SKUs."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(GoldenSku).order_by(GoldenSku.created_at.desc()).limit(limit)
+        )
+        skus = result.scalars().all()
+
+        return {
+            "count": len(skus),
+            "skus": [
+                {
+                    "sku_key": sku.sku_key,
+                    "model": sku.model,
+                    "storage": sku.storage,
+                    "color": sku.color,
+                    "display_name": sku.display_name,
+                }
+                for sku in skus
+            ],
+        }
