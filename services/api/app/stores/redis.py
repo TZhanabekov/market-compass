@@ -11,6 +11,7 @@ TTL policies:
 - Merchant URL by offerId: 7-30 days
 - UI payload cache: 30-300 seconds
 - Hydration locks: 30-120 seconds
+- FX rates (OpenExchangeRates): ~1 hour
 """
 
 import json
@@ -27,6 +28,7 @@ TTL_IMMERSIVE_CACHE = 604800  # 7 days
 TTL_MERCHANT_URL = 604800  # 7 days
 TTL_UI_PAYLOAD = 60  # 1 minute
 TTL_HYDRATION_LOCK = 60  # 1 minute
+TTL_FX_RATES = 3600  # 1 hour
 
 # Key prefixes
 PREFIX_SHOPPING = "shopping:"
@@ -34,6 +36,7 @@ PREFIX_IMMERSIVE = "immersive:"
 PREFIX_MERCHANT_URL = "merchant_url:"
 PREFIX_UI_PAYLOAD = "ui:"
 PREFIX_LOCK = "lock:"
+PREFIX_FX_RATES = "fx:rates:"
 
 # Redis client (initialized on startup)
 _redis: redis.Redis | None = None
@@ -181,6 +184,21 @@ async def set_immersive_cache(token: str, data: dict[str, Any]) -> None:
         data: Data to cache.
     """
     await cache_set_json(f"{PREFIX_IMMERSIVE}{token}", data, TTL_IMMERSIVE_CACHE)
+
+
+# ============================================================
+# FX rates cache (OpenExchangeRates)
+# ============================================================
+
+
+async def get_fx_rates_cache(base: str = "USD") -> dict[str, Any] | None:
+    """Get cached FX rates payload for a base currency."""
+    return await cache_get_json(f"{PREFIX_FX_RATES}{base.upper()}")
+
+
+async def set_fx_rates_cache(base: str, payload: dict[str, Any]) -> None:
+    """Cache FX rates payload for a base currency (TTL ~1 hour)."""
+    await cache_set_json(f"{PREFIX_FX_RATES}{base.upper()}", payload, TTL_FX_RATES)
 
 
 # ============================================================

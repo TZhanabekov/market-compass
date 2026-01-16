@@ -121,7 +121,7 @@ services/
 #### 1.2 Redis кеширование
 - [x] Структура кеша (TTL политики)
 - [x] Locks для hydration (предотвращение thundering herd)
-- [ ] Интеграция с Upstash Redis (production)
+- [x] Интеграция с Upstash Redis (production)
 - [x] Унификация env: `CORS_ORIGINS` (+ совместимость с `ALLOWED_ORIGINS`), `SERPAPI_API_KEY` (+ `SERPAPI_KEY`), `AUTO_MIGRATE` в примерах
 - [x] Подготовка к Upstash Redis (TLS CA certs в Docker + Redis ping/таймауты на старте)
 - [x] Startup health-логи: явные `Postgres connected` / `Redis connected` в deploy output
@@ -133,8 +133,9 @@ services/
 - [x] API использует данные из PostgreSQL
 
 #### 1.4 Курсы валют
-- [ ] Интеграция с openexchangerates API
+- [ ] Интеграция с openexchangerates API (FX service)
 - [ ] Кеширование в Redis (TTL ~1 час)
+- [x] Добавлен FX сервис + Redis cache helpers (готово к подключению в ingestion/пересчёт price_usd)
 
 ---
 
