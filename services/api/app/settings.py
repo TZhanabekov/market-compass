@@ -1,8 +1,10 @@
 """Application settings via Pydantic Settings."""
 
 from functools import lru_cache
+import json
 from urllib.parse import urlparse
 
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -63,13 +65,51 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # CORS
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000"],
+        validation_alias=AliasChoices("CORS_ORIGINS", "ALLOWED_ORIGINS"),
+    )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, v: object) -> list[str]:
+        """
+        Accept either:
+        - JSON array string: '["https://a.com","http://localhost:3000"]'
+        - Comma-separated string: "https://a.com,http://localhost:3000"
+        - Already-parsed list[str]
+        """
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(x).strip() for x in v if str(x).strip()]
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return []
+            if s.startswith("["):
+                try:
+                    parsed = json.loads(s)
+                except json.JSONDecodeError:
+                    # Fall back to comma split if env var isn't valid JSON.
+                    parsed = s.split(",")
+                if isinstance(parsed, list):
+                    return [str(x).strip() for x in parsed if str(x).strip()]
+                return [str(parsed).strip()]
+            return [part.strip() for part in s.split(",") if part.strip()]
+        return [str(v).strip()] if str(v).strip() else []
 
     # SerpAPI (for future use)
-    serpapi_key: str = ""
+    serpapi_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("SERPAPI_API_KEY", "SERPAPI_KEY"),
+    )
 
     # OpenExchangeRates (for future use)
-    openexchangerates_key: str = ""
+    openexchangerates_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENEXCHANGERATES_KEY", "OPENEXCHANGERATES_APP_ID"),
+    )
 
 
 @lru_cache

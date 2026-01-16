@@ -9,7 +9,7 @@ From repo root:
 - build: `pnpm --filter web build`
 
 Frontend env:
-- `VITE_API_BASE_URL=http://localhost:8080`
+- `NEXT_PUBLIC_API_URL=http://localhost:8080`
 
 ### Backend (FastAPI)
 From `services/api`:
@@ -24,7 +24,8 @@ Backend env:
 - `REDIS_URL`
 - `SERPAPI_API_KEY`
 - `OPENAI_API_KEY` (for guides generation)
-- `ALLOWED_ORIGINS` (CORS)
+- `CORS_ORIGINS` (CORS; also accepts `ALLOWED_ORIGINS` for backward compatibility)
+- `AUTO_MIGRATE` (set `true` on Railway to run Alembic on deploy/start)
 
 ## Deploy
 
@@ -32,20 +33,19 @@ Backend env:
 - Root Directory: `apps/web`
 - Install: `pnpm install --frozen-lockfile`
 - Build: `pnpm build`
-- Output: `dist`
 - Env:
-  - `VITE_API_BASE_URL=https://api.example.com`
+  - `NEXT_PUBLIC_API_URL=https://api.example.com`
 
 ### Railway (services/api)
 - Root Directory: `services/api`
-- Start command:
-  - `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- Start command: Dockerfile default (`./scripts/start.sh`)
 - Env:
   - `DATABASE_URL` (Railway Postgres)
   - `REDIS_URL` (Upstash or Railway Redis)
   - `SERPAPI_API_KEY`
   - `OPENAI_API_KEY`
-  - `ALLOWED_ORIGINS=https://app.example.com`
+  - `CORS_ORIGINS=["https://app.example.com"]`
+  - `AUTO_MIGRATE=true`
 
 ### Workers (optional)
 Create a second Railway service from `services/worker` to run:

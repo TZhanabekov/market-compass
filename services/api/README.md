@@ -96,7 +96,8 @@ services/api/
 | `DATABASE_URL` | `postgresql+asyncpg://...` | PostgreSQL connection |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins |
-| `SERPAPI_KEY` | `` | SerpAPI key (optional for now) |
+| `AUTO_MIGRATE` | `false` | Run `alembic upgrade head` on start/deploy |
+| `SERPAPI_API_KEY` | `` | SerpAPI key (optional; also accepts `SERPAPI_KEY`) |
 
 ## Railway Deployment
 
@@ -122,7 +123,7 @@ Set these in Railway dashboard:
 
 ### Run Migrations
 
-After deployment, run migrations via Railway CLI or shell:
+After deployment, run migrations via Railway CLI or shell (or set `AUTO_MIGRATE=true`):
 
 ```bash
 railway run alembic upgrade head
