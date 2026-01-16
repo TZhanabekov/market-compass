@@ -142,11 +142,13 @@ services/
 ## Phase 2 — SerpAPI интеграция
 
 - [x] SerpAPI клиент (структура для google_shopping + immersive)
-- [ ] Реальные вызовы SerpAPI
-- [ ] Regex extraction для атрибутов iPhone
-- [ ] GPT-4o-mini fallback для сложных случаев
+- [x] Реальные вызовы SerpAPI (с кешированием в Redis, TTL 1-6h)
+- [x] Regex extraction для атрибутов iPhone (model/storage/color/condition)
+- [ ] GPT-4o-mini fallback для сложных случаев (low-confidence)
 - [x] Trust Score (0-100) — базовый алгоритм
 - [x] Ranking по effective price
+- [x] Ingestion service: SerpAPI → extraction → FX → dedup → DB
+- [x] Admin endpoint: `POST /v1/admin/ingest` для ручного тестирования
 - [ ] Scheduled refresh jobs (worker)
 - [ ] ⚠️ Удалить seed-данные и заменить реальными из SerpAPI
 

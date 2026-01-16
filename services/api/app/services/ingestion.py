@@ -1,0 +1,453 @@
+"""Ingestion service: SerpAPI → attribute extraction → FX → dedup → DB.
+
+This is the core pipeline for importing offers from SerpAPI into the database.
+
+Flow:
+1. Search SerpAPI google_shopping for a SKU query
+2. Filter non-iPhone products (cases, screen protectors, etc.)
+3. Extract attributes (model, storage, color, condition) via regex
+4. Convert price to USD via FX service
+5. Compute dedup key and check for duplicates
+6. Match to existing Golden SKU or skip if no match
+7. Calculate trust score
+8. Persist offer to database
+
+Cost control:
+- Only call SerpAPI when cache is stale (TTL 1-6h)
+- Never call immersive in bulk - only Top-N eager or lazy on CTA
+"""
+
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from uuid import uuid4
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import GoldenSku, Merchant, Offer
+from app.services.attribute_extractor import (
+    ExtractionConfidence,
+    extract_attributes,
+    filter_non_iphone_products,
+    is_iphone_product,
+)
+from app.services.dedup import compute_offer_dedup_key, compute_sku_key
+from app.services.fx import convert_to_usd, get_fx_rates
+from app.services.serpapi_client import ShoppingResult, get_serpapi_client
+from app.services.trust import MerchantTier, TrustFactors, calculate_trust_score, get_merchant_tier
+from app.stores.postgres import get_session
+
+logger = logging.getLogger("uvicorn.error")
+
+
+# ============================================================
+# Country/Location Mapping
+# ============================================================
+
+# Country code -> Google Shopping gl parameter
+COUNTRY_GL_MAP = {
+    "JP": "jp",
+    "US": "us",
+    "HK": "hk",
+    "AE": "ae",
+    "DE": "de",
+    "GB": "uk",
+    "FR": "fr",
+    "SG": "sg",
+    "KR": "kr",
+    "AU": "au",
+}
+
+# Country code -> currency
+COUNTRY_CURRENCY_MAP = {
+    "JP": "JPY",
+    "US": "USD",
+    "HK": "HKD",
+    "AE": "AED",
+    "DE": "EUR",
+    "GB": "GBP",
+    "FR": "EUR",
+    "SG": "SGD",
+    "KR": "KRW",
+    "AU": "AUD",
+}
+
+# Country code -> full name
+COUNTRY_NAME_MAP = {
+    "JP": "Japan",
+    "US": "United States",
+    "HK": "Hong Kong",
+    "AE": "United Arab Emirates",
+    "DE": "Germany",
+    "GB": "United Kingdom",
+    "FR": "France",
+    "SG": "Singapore",
+    "KR": "South Korea",
+    "AU": "Australia",
+}
+
+
+@dataclass
+class IngestionStats:
+    """Statistics from an ingestion run."""
+
+    query: str
+    country_code: str
+    total_results: int
+    filtered_accessories: int
+    low_confidence: int
+    no_sku_match: int
+    duplicates: int
+    new_offers: int
+    updated_offers: int
+    errors: int
+
+
+@dataclass
+class IngestionConfig:
+    """Configuration for ingestion run."""
+
+    min_confidence: ExtractionConfidence = ExtractionConfidence.MEDIUM
+    skip_low_confidence: bool = True
+    update_existing: bool = True
+
+
+async def ingest_offers_for_sku(
+    sku_key: str,
+    country_code: str,
+    config: IngestionConfig | None = None,
+) -> IngestionStats:
+    """Ingest offers from SerpAPI for a specific SKU and country.
+
+    Args:
+        sku_key: Golden SKU key to search for.
+        country_code: Country code (e.g., "JP", "US").
+        config: Optional ingestion configuration.
+
+    Returns:
+        IngestionStats with counts of processed offers.
+    """
+    config = config or IngestionConfig()
+
+    stats = IngestionStats(
+        query=sku_key,
+        country_code=country_code,
+        total_results=0,
+        filtered_accessories=0,
+        low_confidence=0,
+        no_sku_match=0,
+        duplicates=0,
+        new_offers=0,
+        updated_offers=0,
+        errors=0,
+    )
+
+    # Build search query from SKU key
+    query = _sku_key_to_search_query(sku_key)
+    gl = COUNTRY_GL_MAP.get(country_code.upper(), "us")
+
+    logger.info(f"Starting ingestion for SKU={sku_key}, country={country_code}, query={query}")
+
+    # 1. Search SerpAPI
+    client = get_serpapi_client()
+    try:
+        results = await client.search_shopping(query=query, gl=gl)
+    except Exception as e:
+        logger.error(f"SerpAPI search failed: {e}")
+        stats.errors = 1
+        return stats
+
+    stats.total_results = len(results)
+    logger.info(f"Got {len(results)} results from SerpAPI")
+
+    if not results:
+        return stats
+
+    # 2. Get FX rates for price conversion
+    fx_rates = await get_fx_rates()
+
+    # 3. Process each result
+    async with get_session() as session:
+        # Find the target SKU
+        sku = await _find_sku(session, sku_key)
+        if not sku:
+            logger.warning(f"No Golden SKU found for key={sku_key}")
+            stats.no_sku_match = len(results)
+            return stats
+
+        for result in results:
+            try:
+                processed = await _process_shopping_result(
+                    session=session,
+                    result=result,
+                    target_sku=sku,
+                    country_code=country_code,
+                    fx_rates=fx_rates,
+                    config=config,
+                    stats=stats,
+                )
+            except Exception as e:
+                logger.error(f"Error processing result {result.product_id}: {e}")
+                stats.errors += 1
+
+    logger.info(
+        f"Ingestion complete: new={stats.new_offers}, updated={stats.updated_offers}, "
+        f"filtered={stats.filtered_accessories}, duplicates={stats.duplicates}"
+    )
+    return stats
+
+
+async def _process_shopping_result(
+    session: AsyncSession,
+    result: ShoppingResult,
+    target_sku: GoldenSku,
+    country_code: str,
+    fx_rates: dict[str, float] | None,
+    config: IngestionConfig,
+    stats: IngestionStats,
+) -> bool:
+    """Process a single shopping result.
+
+    Returns:
+        True if offer was created/updated, False otherwise.
+    """
+    # Filter non-iPhone products (cases, accessories, etc.)
+    if not is_iphone_product(result.title):
+        stats.filtered_accessories += 1
+        return False
+
+    if filter_non_iphone_products(result.title):
+        stats.filtered_accessories += 1
+        return False
+
+    # Extract attributes
+    extraction = extract_attributes(result.title)
+
+    # Skip low confidence if configured
+    if config.skip_low_confidence:
+        if extraction.confidence == ExtractionConfidence.LOW:
+            stats.low_confidence += 1
+            return False
+
+    # Match to target SKU (simple check: model must match)
+    if extraction.attributes.get("model") != target_sku.model:
+        stats.no_sku_match += 1
+        return False
+
+    # Compute dedup key
+    dedup_key = compute_offer_dedup_key(
+        merchant=result.merchant,
+        price=result.price,
+        currency=result.currency,
+        url=result.product_link,
+    )
+
+    # Check for existing offer
+    existing = await _find_offer_by_dedup_key(session, dedup_key)
+    if existing:
+        if config.update_existing:
+            await _update_offer(session, existing, result, country_code, fx_rates)
+            stats.updated_offers += 1
+            return True
+        else:
+            stats.duplicates += 1
+            return False
+
+    # Create new offer
+    await _create_offer(
+        session=session,
+        result=result,
+        sku=target_sku,
+        country_code=country_code,
+        dedup_key=dedup_key,
+        fx_rates=fx_rates,
+        extraction=extraction,
+    )
+    stats.new_offers += 1
+    return True
+
+
+def _sku_key_to_search_query(sku_key: str) -> str:
+    """Convert SKU key to a search query.
+
+    Example: "iphone-16-pro-256gb-black-new" -> "iPhone 16 Pro 256GB"
+    """
+    parts = sku_key.split("-")
+
+    # Extract model parts (iphone-16-pro or iphone-16-pro-max)
+    model_parts = []
+    storage = None
+    i = 0
+
+    while i < len(parts):
+        part = parts[i]
+        if part == "iphone":
+            model_parts.append("iPhone")
+        elif part.isdigit():
+            model_parts.append(part)
+        elif part in ("pro", "plus", "max"):
+            model_parts.append(part.capitalize())
+        elif part.endswith("gb") or part.endswith("tb"):
+            storage = part.upper()
+            break
+        else:
+            break
+        i += 1
+
+    query_parts = model_parts
+    if storage:
+        query_parts.append(storage)
+
+    return " ".join(query_parts)
+
+
+async def _find_sku(session: AsyncSession, sku_key: str) -> GoldenSku | None:
+    """Find Golden SKU by key."""
+    result = await session.execute(
+        select(GoldenSku).where(GoldenSku.sku_key == sku_key)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _find_offer_by_dedup_key(session: AsyncSession, dedup_key: str) -> Offer | None:
+    """Find existing offer by dedup key."""
+    result = await session.execute(
+        select(Offer).where(Offer.dedup_key == dedup_key)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _find_or_create_merchant(session: AsyncSession, merchant_name: str) -> Merchant | None:
+    """Find or create merchant by name."""
+    normalized = merchant_name.lower().strip()
+    result = await session.execute(
+        select(Merchant).where(Merchant.normalized_name == normalized)
+    )
+    merchant = result.scalar_one_or_none()
+
+    if not merchant:
+        # Create new merchant
+        tier = get_merchant_tier(merchant_name)
+        merchant = Merchant(
+            name=merchant_name,
+            normalized_name=normalized,
+            tier=tier,  # MerchantTier enum, not string
+        )
+        session.add(merchant)
+        await session.flush()
+
+    return merchant
+
+
+async def _create_offer(
+    session: AsyncSession,
+    result: ShoppingResult,
+    sku: GoldenSku,
+    country_code: str,
+    dedup_key: str,
+    fx_rates: dict[str, float] | None,
+    extraction,
+) -> Offer:
+    """Create new offer from shopping result."""
+    # Get or create merchant
+    merchant = await _find_or_create_merchant(session, result.merchant)
+
+    # Convert price to USD
+    price_usd = result.price
+    if result.currency != "USD" and fx_rates:
+        price_usd = convert_to_usd(result.price, result.currency, fx_rates)
+
+    # Calculate trust score
+    merchant_tier = get_merchant_tier(result.merchant)
+    trust_factors = TrustFactors(
+        merchant_tier=merchant_tier,
+        has_shipping_info=False,  # Not available from google_shopping
+        has_warranty_info=False,
+        has_return_policy=False,
+        price_within_expected_range=True,  # TODO: implement anomaly detection
+    )
+    trust_score = calculate_trust_score(trust_factors)
+
+    # Format local price
+    local_price_formatted = _format_local_price(result.price, result.currency)
+
+    offer = Offer(
+        offer_id=str(uuid4()),
+        sku_id=sku.id,
+        merchant_id=merchant.id if merchant else None,
+        dedup_key=dedup_key,
+        country_code=country_code.upper(),
+        country=COUNTRY_NAME_MAP.get(country_code.upper(), country_code),
+        city=None,
+        price=result.price,
+        currency=result.currency,
+        price_usd=round(price_usd, 2),
+        tax_refund_value=0,
+        shipping_cost=0,
+        import_duty=0,
+        final_effective_price=round(price_usd, 2),
+        local_price_formatted=local_price_formatted,
+        shop_name=result.merchant,
+        trust_score=trust_score,
+        availability="In Stock",  # Assume in stock from google_shopping
+        sim_type=None,
+        warranty=None,
+        restriction_alert=None,
+        product_link=result.product_link,
+        merchant_url=None,
+        immersive_token=result.immersive_token,
+        guide_steps_json=None,
+        unknown_shipping=True,
+        unknown_refund=True,
+        source="serpapi",
+        source_product_id=result.product_id,
+        fetched_at=datetime.now(timezone.utc),
+    )
+    session.add(offer)
+    await session.flush()
+    return offer
+
+
+async def _update_offer(
+    session: AsyncSession,
+    offer: Offer,
+    result: ShoppingResult,
+    country_code: str,
+    fx_rates: dict[str, float] | None,
+) -> None:
+    """Update existing offer with fresh data."""
+    # Convert price to USD
+    price_usd = result.price
+    if result.currency != "USD" and fx_rates:
+        price_usd = convert_to_usd(result.price, result.currency, fx_rates)
+
+    offer.price = result.price
+    offer.price_usd = round(price_usd, 2)
+    offer.final_effective_price = round(price_usd, 2)
+    offer.local_price_formatted = _format_local_price(result.price, result.currency)
+    offer.updated_at = datetime.now(timezone.utc)
+
+
+def _format_local_price(price: float, currency: str) -> str:
+    """Format price with currency symbol."""
+    symbols = {
+        "USD": "$",
+        "EUR": "€",
+        "GBP": "£",
+        "JPY": "¥",
+        "HKD": "HK$",
+        "AED": "AED ",
+        "SGD": "S$",
+        "KRW": "₩",
+        "AUD": "A$",
+    }
+
+    symbol = symbols.get(currency, f"{currency} ")
+
+    # Format with thousands separator
+    if currency in ("JPY", "KRW"):
+        # No decimals for these currencies
+        return f"{symbol}{price:,.0f}"
+    else:
+        return f"{symbol}{price:,.2f}"

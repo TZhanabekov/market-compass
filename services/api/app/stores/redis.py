@@ -29,6 +29,7 @@ TTL_MERCHANT_URL = 604800  # 7 days
 TTL_UI_PAYLOAD = 60  # 1 minute
 TTL_HYDRATION_LOCK = 60  # 1 minute
 TTL_FX_RATES = 3600  # 1 hour
+TTL_SHOPPING_CACHE = 3600  # 1 hour (can be 1-6h per docs)
 
 # Key prefixes
 PREFIX_SHOPPING = "shopping:"

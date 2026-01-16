@@ -17,12 +17,25 @@ Budget tracking:
 - Record SerpAPI usage counters (calls/day)
 """
 
-from dataclasses import dataclass
+import hashlib
+import json
+import logging
+from dataclasses import dataclass, asdict
 from typing import Any
 
 import httpx
 
 from app.settings import get_settings
+from app.stores.redis import (
+    cache_get_json,
+    cache_set_json,
+    get_immersive_cache,
+    set_immersive_cache,
+    TTL_SHOPPING_CACHE,
+    TTL_IMMERSIVE_CACHE,
+)
+
+logger = logging.getLogger("uvicorn.error")
 
 
 @dataclass
@@ -77,23 +90,42 @@ class SerpAPIClient:
         location: str | None = None,
         gl: str = "us",
         hl: str = "en",
+        use_cache: bool = True,
     ) -> list[ShoppingResult]:
         """Search Google Shopping for products.
 
         This is the primary feed for bulk ingestion.
-        Results should be cached for 1-6 hours.
+        Results are cached for 1-6 hours in Redis.
 
         Args:
             query: Search query (e.g., "iPhone 16 Pro 256GB").
             location: Optional location string.
             gl: Country code for Google (default: "us").
             hl: Language code (default: "en").
+            use_cache: Whether to use Redis cache (default: True).
 
         Returns:
             List of shopping results.
         """
         if not self.api_key:
+            logger.warning("SerpAPI key not configured, returning empty results")
             return []
+
+        # Build cache key
+        cache_key = self._build_shopping_cache_key(query, gl, hl, location)
+
+        # Check cache first
+        if use_cache:
+            try:
+                cached = await cache_get_json(cache_key)
+                if cached:
+                    logger.info(f"SerpAPI cache HIT for query={query}, gl={gl}")
+                    return [ShoppingResult(**item) for item in cached]
+            except Exception as e:
+                logger.warning(f"Redis cache read failed: {e}")
+
+        # Make API call
+        logger.info(f"SerpAPI cache MISS, calling API for query={query}, gl={gl}")
 
         params = {
             "engine": "google_shopping",
@@ -111,11 +143,38 @@ class SerpAPIClient:
         response.raise_for_status()
 
         data = response.json()
-        return self._parse_shopping_results(data)
+        results = self._parse_shopping_results(data)
+
+        # Cache results
+        if use_cache and results:
+            try:
+                await cache_set_json(
+                    cache_key,
+                    [asdict(r) for r in results],
+                    TTL_SHOPPING_CACHE,
+                )
+                logger.info(f"Cached {len(results)} shopping results for {cache_key}")
+            except Exception as e:
+                logger.warning(f"Redis cache write failed: {e}")
+
+        return results
+
+    def _build_shopping_cache_key(
+        self,
+        query: str,
+        gl: str,
+        hl: str,
+        location: str | None,
+    ) -> str:
+        """Build cache key for shopping results."""
+        key_parts = f"{query}:{gl}:{hl}:{location or ''}"
+        key_hash = hashlib.sha256(key_parts.encode()).hexdigest()[:16]
+        return f"shopping:{key_hash}"
 
     async def get_immersive_product(
         self,
         product_id: str,
+        use_cache: bool = True,
     ) -> ImmersiveResult | None:
         """Get detailed product info via google_immersive_product.
 
@@ -123,16 +182,31 @@ class SerpAPIClient:
         - Eager: Top-1 (optionally Top-3)
         - Lazy: only on CTA click
 
-        Results should be cached for 7-30 days.
+        Results are cached for 7-30 days in Redis.
 
         Args:
             product_id: Product ID from shopping result.
+            use_cache: Whether to use Redis cache (default: True).
 
         Returns:
             Immersive result with merchant URL, or None if failed.
         """
         if not self.api_key:
+            logger.warning("SerpAPI key not configured for immersive call")
             return None
+
+        # Check cache first
+        if use_cache:
+            try:
+                cached = await get_immersive_cache(product_id)
+                if cached:
+                    logger.info(f"Immersive cache HIT for product_id={product_id}")
+                    return ImmersiveResult(**cached)
+            except Exception as e:
+                logger.warning(f"Redis immersive cache read failed: {e}")
+
+        # Make API call
+        logger.info(f"Immersive cache MISS, calling API for product_id={product_id}")
 
         params = {
             "engine": "google_immersive_product",
@@ -144,10 +218,21 @@ class SerpAPIClient:
         response = await client.get(self.BASE_URL, params=params)
 
         if response.status_code != 200:
+            logger.warning(f"Immersive API returned {response.status_code} for {product_id}")
             return None
 
         data = response.json()
-        return self._parse_immersive_result(data, product_id)
+        result = self._parse_immersive_result(data, product_id)
+
+        # Cache result
+        if use_cache and result:
+            try:
+                await set_immersive_cache(product_id, asdict(result))
+                logger.info(f"Cached immersive result for product_id={product_id}")
+            except Exception as e:
+                logger.warning(f"Redis immersive cache write failed: {e}")
+
+        return result
 
     def _parse_shopping_results(self, data: dict[str, Any]) -> list[ShoppingResult]:
         """Parse google_shopping API response."""
