@@ -265,32 +265,80 @@ class SerpAPIClient:
         return result
 
     def _parse_shopping_results(self, data: dict[str, Any], gl: str = "us") -> list[ShoppingResult]:
-        """Parse google_shopping API response."""
+        """Parse google_shopping API response.
+
+        Processes both:
+        - shopping_results: Organic shopping listings (full product details, product_id, immersive tokens)
+        - inline_shopping_results: Shopping ads (simpler structure, link instead of product_link, may lack product_id)
+        """
         results: list[ShoppingResult] = []
 
+        # Parse regular shopping_results
         shopping_results = data.get("shopping_results", [])
         for item in shopping_results:
             try:
-                # Extract currency from multiple sources
-                currency = self._extract_currency(item, gl)
+                result = self._parse_shopping_item(item, gl, is_inline=False)
+                if result and result.product_id and result.price > 0:
+                    results.append(result)
+            except Exception:
+                continue
 
-                result = ShoppingResult(
-                    product_id=item.get("product_id", ""),
-                    title=item.get("title", ""),
-                    price=self._parse_price(item.get("extracted_price", 0)),
-                    currency=currency,
-                    merchant=item.get("source", ""),
-                    product_link=item.get("product_link", ""),
-                    immersive_token=item.get("serpapi_product_api", ""),
-                    thumbnail=item.get("thumbnail"),
-                    second_hand_condition=item.get("second_hand_condition"),  # None = new, "refurbished"/"used" = not new
-                )
-                if result.product_id and result.price > 0:
+        # Parse inline_shopping_results (ads)
+        inline_shopping_results = data.get("inline_shopping_results", [])
+        for item in inline_shopping_results:
+            try:
+                result = self._parse_shopping_item(item, gl, is_inline=True)
+                if result and result.price > 0:
+                    # For inline results, product_id may be missing - use link hash as fallback
+                    if not result.product_id:
+                        # Generate stable ID from link
+                        link = result.product_link
+                        if link:
+                            import hashlib
+                            result.product_id = hashlib.sha256(link.encode()).hexdigest()[:16]
+                        else:
+                            continue  # Skip if no link and no product_id
                     results.append(result)
             except Exception:
                 continue
 
         return results
+
+    def _parse_shopping_item(self, item: dict[str, Any], gl: str, is_inline: bool = False) -> ShoppingResult | None:
+        """Parse a single shopping result item (from shopping_results or inline_shopping_results).
+
+        Args:
+            item: Shopping result item dictionary.
+            gl: Country code for currency inference.
+            is_inline: True if from inline_shopping_results (ads), False if from shopping_results.
+
+        Returns:
+            ShoppingResult or None if parsing fails.
+        """
+        # Extract currency from multiple sources
+        currency = self._extract_currency(item, gl)
+
+        # Handle differences between shopping_results and inline_shopping_results:
+        # - inline_shopping_results use "link" instead of "product_link"
+        # - inline_shopping_results may not have "product_id"
+        # - inline_shopping_results use "serpapi_immersive_product_api" (if present) differently
+        product_link = item.get("product_link") or item.get("link", "")
+        product_id = item.get("product_id", "")
+
+        # For inline_shopping_results, immersive token might be in different format
+        immersive_token = item.get("serpapi_product_api") or item.get("serpapi_immersive_product_api", "")
+
+        return ShoppingResult(
+            product_id=product_id,
+            title=item.get("title", ""),
+            price=self._parse_price(item.get("extracted_price", 0)),
+            currency=currency,
+            merchant=item.get("source", ""),
+            product_link=product_link,
+            immersive_token=immersive_token if immersive_token else None,
+            thumbnail=item.get("thumbnail"),
+            second_hand_condition=item.get("second_hand_condition"),  # None = new, "refurbished"/"used" = not new
+        )
 
     def _extract_currency(self, item: dict[str, Any], gl: str = "us") -> str:
         """Extract currency from SerpAPI shopping result.
