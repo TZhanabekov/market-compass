@@ -46,11 +46,18 @@ class ExtractionResult:
 
 # Model patterns (order matters - more specific first)
 _MODEL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    # iPhone 16 series
+    # iPhone 17 series (2025)
+    (re.compile(r"iphone\s*17\s*pro\s*max", re.IGNORECASE), "iphone-17-pro-max"),
+    (re.compile(r"iphone\s*17\s*pro(?!\s*max)", re.IGNORECASE), "iphone-17-pro"),
+    (re.compile(r"iphone\s*17\s*air", re.IGNORECASE), "iphone-17-air"),  # New slim model, replaces Plus
+    (re.compile(r"iphone\s*17(?!\s*pro|\s*air)", re.IGNORECASE), "iphone-17"),
+    # iPhone 16 series (2024)
     (re.compile(r"iphone\s*16\s*pro\s*max", re.IGNORECASE), "iphone-16-pro-max"),
     (re.compile(r"iphone\s*16\s*pro(?!\s*max)", re.IGNORECASE), "iphone-16-pro"),
     (re.compile(r"iphone\s*16\s*plus", re.IGNORECASE), "iphone-16-plus"),
-    (re.compile(r"iphone\s*16(?!\s*pro|\s*plus)", re.IGNORECASE), "iphone-16"),
+    (re.compile(r"iphone\s*16\s*e\b", re.IGNORECASE), "iphone-16e"),  # Budget model
+    (re.compile(r"iphone\s*16e\b", re.IGNORECASE), "iphone-16e"),  # Alternative spelling
+    (re.compile(r"iphone\s*16(?!\s*pro|\s*plus|\s*e)", re.IGNORECASE), "iphone-16"),
     # iPhone 15 series
     (re.compile(r"iphone\s*15\s*pro\s*max", re.IGNORECASE), "iphone-15-pro-max"),
     (re.compile(r"iphone\s*15\s*pro(?!\s*max)", re.IGNORECASE), "iphone-15-pro"),
@@ -61,6 +68,17 @@ _MODEL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"iphone\s*14\s*pro(?!\s*max)", re.IGNORECASE), "iphone-14-pro"),
     (re.compile(r"iphone\s*14\s*plus", re.IGNORECASE), "iphone-14-plus"),
     (re.compile(r"iphone\s*14(?!\s*pro|\s*plus)", re.IGNORECASE), "iphone-14"),
+    # iPhone 13 series (still popular)
+    (re.compile(r"iphone\s*13\s*pro\s*max", re.IGNORECASE), "iphone-13-pro-max"),
+    (re.compile(r"iphone\s*13\s*pro(?!\s*max)", re.IGNORECASE), "iphone-13-pro"),
+    (re.compile(r"iphone\s*13\s*mini", re.IGNORECASE), "iphone-13-mini"),
+    (re.compile(r"iphone\s*13(?!\s*pro|\s*mini)", re.IGNORECASE), "iphone-13"),
+    # iPhone SE series (order matters - specific patterns before generic)
+    (re.compile(r"iphone\s*se\s*2022", re.IGNORECASE), "iphone-se-3"),  # SE 2022 = 3rd gen
+    (re.compile(r"iphone\s*se\s*2020", re.IGNORECASE), "iphone-se-2"),  # SE 2020 = 2nd gen
+    (re.compile(r"iphone\s*se\s*\(?3(rd)?\s*(gen(eration)?)?\)?", re.IGNORECASE), "iphone-se-3"),
+    (re.compile(r"iphone\s*se\s*\(?2(nd)?\s*(gen(eration)?)?\)?", re.IGNORECASE), "iphone-se-2"),
+    (re.compile(r"iphone\s*se\b", re.IGNORECASE), "iphone-se"),  # Generic SE (matches "iPhone SE 64GB")
 ]
 
 # ============================================================
@@ -73,7 +91,7 @@ _STORAGE_PATTERN = re.compile(
 )
 
 # Valid iPhone storage options (for validation)
-_VALID_STORAGES = {"128gb", "256gb", "512gb", "1tb"}
+_VALID_STORAGES = {"64gb", "128gb", "256gb", "512gb", "1tb", "2tb"}
 
 
 # ============================================================
@@ -88,9 +106,18 @@ _COLOR_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"black\s*titanium", re.IGNORECASE), "black"),
     (re.compile(r"blue\s*titanium", re.IGNORECASE), "blue"),
     (re.compile(r"desert\s*titanium", re.IGNORECASE), "desert"),
+    # iPhone 17 Pro colors (2025)
+    (re.compile(r"deep\s*blue", re.IGNORECASE), "deep-blue"),
+    (re.compile(r"cosmic\s*orange", re.IGNORECASE), "cosmic-orange"),
+    # iPhone 16 colors (2024)
+    (re.compile(r"\bultramarine\b", re.IGNORECASE), "ultramarine"),
+    (re.compile(r"\bteal\b", re.IGNORECASE), "teal"),
     # Space colors
     (re.compile(r"space\s*black", re.IGNORECASE), "black"),
     (re.compile(r"space\s*gr[ae]y", re.IGNORECASE), "gray"),
+    # Midnight / Starlight (iPhone 13/14/SE)
+    (re.compile(r"\bmidnight\b", re.IGNORECASE), "midnight"),
+    (re.compile(r"\bstarlight\b", re.IGNORECASE), "starlight"),
     # Basic colors
     (re.compile(r"\b(black|noir)\b", re.IGNORECASE), "black"),
     (re.compile(r"\b(white|blanc)\b", re.IGNORECASE), "white"),
@@ -102,8 +129,12 @@ _COLOR_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(green|vert)\b", re.IGNORECASE), "green"),
     (re.compile(r"\b(yellow|jaune)\b", re.IGNORECASE), "yellow"),
     (re.compile(r"\b(red|rouge)\b", re.IGNORECASE), "red"),
+    (re.compile(r"\b(orange)\b", re.IGNORECASE), "orange"),
     (re.compile(r"\bnatural\b", re.IGNORECASE), "natural"),
     (re.compile(r"\bdesert\b", re.IGNORECASE), "desert"),
+    # Product RED
+    (re.compile(r"\(product\)\s*red", re.IGNORECASE), "red"),
+    (re.compile(r"product\s*red", re.IGNORECASE), "red"),
 ]
 
 
