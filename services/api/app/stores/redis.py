@@ -37,7 +37,7 @@ PREFIX_LOCK = "lock:"
 
 # Redis client (initialized on startup)
 _redis: redis.Redis | None = None
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
 
 
 async def init_redis() -> None:

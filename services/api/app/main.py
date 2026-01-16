@@ -5,6 +5,7 @@ Market Compass API - Global iPhone price intelligence.
 
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,8 +13,10 @@ from fastapi.responses import JSONResponse
 
 from app.routes import api_router
 from app.settings import get_settings
-from app.stores.postgres import init_db, close_db
+from app.stores.postgres import init_db, close_db, ping_db
 from app.stores.redis import init_redis, close_redis
+
+logger = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
@@ -28,16 +31,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize database (skip in tests if no DB available)
     try:
         await init_db()
+        await ping_db()
+        logger.info("Postgres connected")
     except Exception as e:
-        if settings.debug:
-            print(f"Warning: Database init failed: {e}")
+        logger.exception("Postgres init failed")
 
     # Initialize Redis (skip in tests if no Redis available)
     try:
         await init_redis()
     except Exception as e:
-        if settings.debug:
-            print(f"Warning: Redis init failed: {e}")
+        logger.exception("Redis init failed")
 
     yield
 

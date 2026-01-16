@@ -9,6 +9,7 @@ Handles:
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -44,6 +45,14 @@ async def init_db() -> None:
         class_=AsyncSession,
         expire_on_commit=False,
     )
+
+
+async def ping_db() -> None:
+    """Validate that the DB is reachable (lightweight SELECT 1)."""
+    if _engine is None:
+        raise RuntimeError("Database not initialized. Call init_db() first.")
+    async with _engine.connect() as conn:
+        await conn.execute(text("SELECT 1"))
 
 
 async def close_db() -> None:

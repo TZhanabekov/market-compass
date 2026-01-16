@@ -124,6 +124,7 @@ services/
 - [ ] Интеграция с Upstash Redis (production)
 - [x] Унификация env: `CORS_ORIGINS` (+ совместимость с `ALLOWED_ORIGINS`), `SERPAPI_API_KEY` (+ `SERPAPI_KEY`), `AUTO_MIGRATE` в примерах
 - [x] Подготовка к Upstash Redis (TLS CA certs в Docker + Redis ping/таймауты на старте)
+- [x] Startup health-логи: явные `Postgres connected` / `Redis connected` в deploy output
 
 #### 1.3 API эндпоинты
 - [x] `GET /health`
