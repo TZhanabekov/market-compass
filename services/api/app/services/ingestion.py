@@ -33,7 +33,7 @@ from app.services.attribute_extractor import (
     is_iphone_product,
 )
 from app.services.dedup import compute_offer_dedup_key, compute_sku_key
-from app.services.fx import convert_to_usd, get_fx_rates
+from app.services.fx import FxRates, convert_to_usd, get_latest_fx_rates
 from app.services.serpapi_client import ShoppingResult, get_serpapi_client
 from app.services.trust import MerchantTier, TrustFactors, calculate_trust_score, get_merchant_tier
 from app.stores.postgres import get_session
@@ -165,7 +165,11 @@ async def ingest_offers_for_sku(
         return stats
 
     # 2. Get FX rates for price conversion
-    fx_rates = await get_fx_rates()
+    try:
+        fx_rates = await get_latest_fx_rates(base="USD")
+    except Exception as e:
+        logger.warning(f"Failed to fetch FX rates: {e}, continuing without conversion")
+        fx_rates = None
 
     # 3. Process each result
     async with get_session() as session:
@@ -203,7 +207,7 @@ async def _process_shopping_result(
     result: ShoppingResult,
     target_sku: GoldenSku,
     country_code: str,
-    fx_rates: dict[str, float] | None,
+    fx_rates: FxRates | None,
     config: IngestionConfig,
     stats: IngestionStats,
 ) -> bool:
@@ -346,7 +350,7 @@ async def _create_offer(
     sku: GoldenSku,
     country_code: str,
     dedup_key: str,
-    fx_rates: dict[str, float] | None,
+    fx_rates: FxRates | None,
     extraction,
 ) -> Offer:
     """Create new offer from shopping result."""
@@ -414,13 +418,17 @@ async def _update_offer(
     offer: Offer,
     result: ShoppingResult,
     country_code: str,
-    fx_rates: dict[str, float] | None,
+    fx_rates: FxRates | None,
 ) -> None:
     """Update existing offer with fresh data."""
     # Convert price to USD
     price_usd = result.price
     if result.currency != "USD" and fx_rates:
-        price_usd = convert_to_usd(result.price, result.currency, fx_rates)
+        try:
+            price_usd = await convert_to_usd(result.price, result.currency, rates=fx_rates)
+        except Exception as e:
+            logger.warning(f"FX conversion failed for {result.currency}: {e}, using original price")
+            price_usd = result.price
 
     offer.price = result.price
     offer.price_usd = round(price_usd, 2)
