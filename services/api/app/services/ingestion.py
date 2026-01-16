@@ -225,8 +225,17 @@ async def _process_shopping_result(
         stats.filtered_accessories += 1
         return False
 
-    # Extract attributes
+    # Extract attributes (model, storage, color) from title
     extraction = extract_attributes(result.title)
+
+    # Get condition from SerpAPI second_hand_condition field (more reliable than title parsing)
+    # If second_hand_condition is None → new, otherwise normalize the value
+    condition = _normalize_condition(result.second_hand_condition)
+
+    # Verify extracted condition matches target SKU condition
+    if condition != target_sku.condition:
+        stats.no_sku_match += 1
+        return False
 
     # Skip low confidence if configured
     if config.skip_low_confidence:
@@ -391,6 +400,9 @@ async def _create_offer(
     # Format local price
     local_price_formatted = _format_local_price(result.price, result.currency)
 
+    # Get condition from SerpAPI second_hand_condition (already normalized in _process_shopping_result)
+    condition = _normalize_condition(result.second_hand_condition)
+
     offer = Offer(
         offer_id=str(uuid4()),
         sku_id=sku.id,
@@ -410,6 +422,7 @@ async def _create_offer(
         shop_name=result.merchant,
         trust_score=trust_score,
         availability="In Stock",  # Assume in stock from google_shopping
+        condition=condition,  # new/refurbished/used
         sim_type=None,
         warranty=None,
         restriction_alert=None,
@@ -461,7 +474,40 @@ async def _update_offer(
     offer.price_usd = round(price_usd, 2)
     offer.final_effective_price = round(price_usd, 2)
     offer.local_price_formatted = _format_local_price(result.price, result.currency)
+    offer.condition = _normalize_condition(result.second_hand_condition)
     offer.updated_at = datetime.now(timezone.utc)
+
+
+def _normalize_condition(second_hand_condition: str | None) -> str:
+    """Normalize condition from SerpAPI second_hand_condition field.
+
+    SerpAPI returns:
+    - None → new (default)
+    - "refurbished" → refurbished
+    - "used" → used
+    - "renewed" → refurbished (synonym)
+    - Other values → normalize to closest match
+
+    Args:
+        second_hand_condition: Value from SerpAPI second_hand_condition field.
+
+    Returns:
+        Normalized condition: "new", "refurbished", or "used".
+    """
+    if not second_hand_condition:
+        return "new"
+
+    condition_lower = second_hand_condition.lower().strip()
+
+    # Map common variations
+    if condition_lower in ("refurbished", "refurb", "renewed", "certified pre-owned", "cpo"):
+        return "refurbished"
+    elif condition_lower in ("used", "pre-owned", "second hand", "secondhand"):
+        return "used"
+    else:
+        # Unknown value - default to "new" for safety
+        logger.warning(f"Unknown second_hand_condition value: {second_hand_condition}, defaulting to 'new'")
+        return "new"
 
 
 def _format_local_price(price: float, currency: str) -> str:

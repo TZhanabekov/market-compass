@@ -50,6 +50,7 @@ class ShoppingResult:
     product_link: str
     immersive_token: str | None = None
     thumbnail: str | None = None
+    second_hand_condition: str | None = None  # "refurbished", "used", "renewed", etc. (None = new)
 
 
 @dataclass
@@ -253,6 +254,7 @@ class SerpAPIClient:
                     product_link=item.get("product_link", ""),
                     immersive_token=item.get("serpapi_product_api", ""),
                     thumbnail=item.get("thumbnail"),
+                    second_hand_condition=item.get("second_hand_condition"),  # None = new, "refurbished"/"used" = not new
                 )
                 if result.product_id and result.price > 0:
                     results.append(result)

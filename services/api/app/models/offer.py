@@ -63,6 +63,7 @@ class Offer(Base):
     availability: Mapped[str] = mapped_column(String(50))  # In Stock, Limited, Out of Stock
 
     # Product info
+    condition: Mapped[str] = mapped_column(String(20), default="new")  # new/refurbished/used
     sim_type: Mapped[str | None] = mapped_column(String(100))
     warranty: Mapped[str | None] = mapped_column(String(200))
     restriction_alert: Mapped[str | None] = mapped_column(Text)
