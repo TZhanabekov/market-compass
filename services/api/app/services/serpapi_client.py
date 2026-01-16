@@ -285,8 +285,8 @@ class SerpAPIClient:
         """Extract currency from SerpAPI shopping result.
 
         Tries multiple sources:
-        1. item.currency (direct field)
-        2. alternative_price.currency
+        1. item.currency (direct field) - normalize if it's a symbol
+        2. alternative_price.currency - normalize if it's a symbol
         3. Parse from price string (¥, $, €, etc.)
         4. Infer from gl parameter (gl=jp → JPY, gl=de → EUR, etc.)
 
@@ -297,17 +297,29 @@ class SerpAPIClient:
         Returns:
             Currency code (e.g., "JPY", "USD", "EUR").
         """
-        # 1. Direct currency field
+        # 1. Direct currency field (may be symbol or code)
         currency = item.get("currency")
         if currency:
-            return str(currency).upper()
+            currency_str = str(currency).strip()
+            # Normalize: if it's a symbol, convert to code
+            normalized = self._normalize_currency_symbol(currency_str)
+            if normalized:
+                return normalized
+            # If already a code (3+ chars), return uppercase
+            if len(currency_str) >= 3:
+                return currency_str.upper()
 
         # 2. Alternative price currency
         alt_price = item.get("alternative_price", {})
         if isinstance(alt_price, dict):
             alt_currency = alt_price.get("currency")
             if alt_currency:
-                return str(alt_currency).upper()
+                alt_currency_str = str(alt_currency).strip()
+                normalized = self._normalize_currency_symbol(alt_currency_str)
+                if normalized:
+                    return normalized
+                if len(alt_currency_str) >= 3:
+                    return alt_currency_str.upper()
 
         # 3. Parse from price string
         price_str = item.get("price", "")
@@ -319,32 +331,102 @@ class SerpAPIClient:
         # 4. Infer from gl parameter
         return self._currency_from_gl(gl)
 
+    def _normalize_currency_symbol(self, symbol: str) -> str | None:
+        """Normalize currency symbol to ISO 4217 code.
+
+        Handles cases where SerpAPI returns a symbol (₪, US$, £) instead of code.
+
+        Args:
+            symbol: Currency symbol or partial code.
+
+        Returns:
+            Currency code (e.g., "ILS", "USD", "GBP") or None if not recognized.
+        """
+        if not symbol:
+            return None
+
+        symbol = symbol.strip()
+
+        # Direct mapping of common symbols to codes
+        symbol_to_code = {
+            "₪": "ILS",
+            "US$": "USD",
+            "$": "USD",
+            "£": "GBP",
+            "€": "EUR",
+            "¥": "JPY",  # Default to JPY, but could be CNY based on gl
+            "₩": "KRW",
+            "HK$": "HKD",
+            "S$": "SGD",
+            "A$": "AUD",
+            "C$": "CAD",
+            "NZ$": "NZD",
+            "₹": "INR",
+            "R$": "BRL",
+            "₽": "RUB",
+            "₨": "PKR",
+            "₦": "NGN",
+            "₫": "VND",
+            "₱": "PHP",
+        }
+
+        # Check exact match
+        if symbol in symbol_to_code:
+            return symbol_to_code[symbol]
+
+        # If it's already a 3-letter code, return as-is (uppercase)
+        if len(symbol) == 3 and symbol.isalpha():
+            return symbol.upper()
+
+        return None
+
     def _currency_from_symbol(self, price_str: str) -> str | None:
         """Extract currency code from price string with symbol.
 
         Examples:
             "¥159,800" → "JPY"
             "$1,099" → "USD"
+            "US$1,099" → "USD"
             "€1,229" → "EUR"
             "£999" → "GBP"
+            "₪14451.71" → "ILS"
         """
         if not price_str:
             return None
 
-        # Currency symbol mapping
+        # Currency symbol mapping (multi-character first, then single)
+        # Note: ¥ is used for both JPY and CNY; we default to JPY here,
+        # but gl parameter will override (gl=cn → CNY via _currency_from_gl)
         symbol_map = {
-            "¥": "JPY",
-            "$": "USD",
-            "€": "EUR",
-            "£": "GBP",
+            "US$": "USD",
             "HK$": "HKD",
             "S$": "SGD",
             "A$": "AUD",
+            "C$": "CAD",
+            "NZ$": "NZD",
+            "₪": "ILS",  # Israeli Shekel
+            "¥": "JPY",  # Japanese Yen (also used for CNY, but gl=cn will override)
+            "$": "USD",
+            "€": "EUR",
+            "£": "GBP",
             "₩": "KRW",
+            "₹": "INR",  # Indian Rupee
+            "R$": "BRL",  # Brazilian Real
+            "₽": "RUB",  # Russian Ruble
+            "₨": "PKR",  # Pakistani Rupee
+            "₦": "NGN",  # Nigerian Naira
+            "₫": "VND",  # Vietnamese Dong
+            "₱": "PHP",  # Philippine Peso
             "AED": "AED",
+            "SAR": "SAR",  # Saudi Riyal
+            "QAR": "QAR",  # Qatari Riyal
+            "KWD": "KWD",  # Kuwaiti Dinar
+            "BHD": "BHD",  # Bahraini Dinar
+            "OMR": "OMR",  # Omani Rial
+            "JOD": "JOD",  # Jordanian Dinar
         }
 
-        # Check for multi-character symbols first (HK$, S$, A$)
+        # Check for multi-character symbols first (US$, HK$, S$, A$, etc.)
         for symbol, code in symbol_map.items():
             if len(symbol) > 1 and price_str.startswith(symbol):
                 return code
@@ -375,16 +457,49 @@ class SerpAPIClient:
             "nl": "EUR",
             "be": "EUR",
             "at": "EUR",
+            "ie": "EUR",
+            "pt": "EUR",
+            "gr": "EUR",
+            "fi": "EUR",
+            "dk": "DKK",
+            "se": "SEK",
+            "no": "NOK",
+            "pl": "PLN",
+            "cz": "CZK",
+            "hu": "HUF",
+            "ro": "RON",
+            "bg": "BGN",
+            "hr": "HRK",
             "hk": "HKD",
             "ae": "AED",
             "sg": "SGD",
             "kr": "KRW",
             "au": "AUD",
             "ca": "CAD",
+            "nz": "NZD",
             "mx": "MXN",
             "br": "BRL",
             "in": "INR",
             "cn": "CNY",
+            "il": "ILS",  # Israel
+            "sa": "SAR",  # Saudi Arabia
+            "qa": "QAR",  # Qatar
+            "kw": "KWD",  # Kuwait
+            "bh": "BHD",  # Bahrain
+            "om": "OMR",  # Oman
+            "jo": "JOD",  # Jordan
+            "tr": "TRY",  # Turkey
+            "ru": "RUB",  # Russia
+            "za": "ZAR",  # South Africa
+            "eg": "EGP",  # Egypt
+            "th": "THB",  # Thailand
+            "my": "MYR",  # Malaysia
+            "id": "IDR",  # Indonesia
+            "ph": "PHP",  # Philippines
+            "vn": "VND",  # Vietnam
+            "pk": "PKR",  # Pakistan
+            "bd": "BDT",  # Bangladesh
+            "ng": "NGN",  # Nigeria
         }
         return gl_to_currency.get(gl_lower, "USD")
 
