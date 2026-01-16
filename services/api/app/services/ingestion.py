@@ -359,8 +359,23 @@ async def _create_offer(
 
     # Convert price to USD
     price_usd = result.price
-    if result.currency != "USD" and fx_rates:
-        price_usd = convert_to_usd(result.price, result.currency, fx_rates)
+    if result.currency != "USD":
+        if fx_rates:
+            try:
+                price_usd = await convert_to_usd(result.price, result.currency, rates=fx_rates)
+            except Exception as e:
+                logger.warning(
+                    f"FX conversion failed for {result.currency} {result.price}: {e}. "
+                    f"Skipping offer to avoid incorrect USD price."
+                )
+                raise ValueError(f"Cannot convert {result.currency} to USD: FX rates unavailable or invalid")
+        else:
+            # FX rates unavailable - cannot safely convert
+            logger.warning(
+                f"FX rates unavailable, cannot convert {result.currency} {result.price} to USD. "
+                f"Skipping offer to avoid incorrect price_usd."
+            )
+            raise ValueError(f"Cannot convert {result.currency} to USD: FX rates unavailable")
 
     # Calculate trust score
     merchant_tier = get_merchant_tier(result.merchant)
@@ -423,12 +438,24 @@ async def _update_offer(
     """Update existing offer with fresh data."""
     # Convert price to USD
     price_usd = result.price
-    if result.currency != "USD" and fx_rates:
-        try:
-            price_usd = await convert_to_usd(result.price, result.currency, rates=fx_rates)
-        except Exception as e:
-            logger.warning(f"FX conversion failed for {result.currency}: {e}, using original price")
-            price_usd = result.price
+    if result.currency != "USD":
+        if fx_rates:
+            try:
+                price_usd = await convert_to_usd(result.price, result.currency, rates=fx_rates)
+            except Exception as e:
+                logger.warning(
+                    f"FX conversion failed for {result.currency} {result.price}: {e}. "
+                    f"Keeping existing price_usd to avoid incorrect update."
+                )
+                # Don't update price_usd if conversion fails
+                return
+        else:
+            logger.warning(
+                f"FX rates unavailable, cannot convert {result.currency} {result.price} to USD. "
+                f"Keeping existing price_usd to avoid incorrect update."
+            )
+            # Don't update price_usd if FX rates unavailable
+            return
 
     offer.price = result.price
     offer.price_usd = round(price_usd, 2)
