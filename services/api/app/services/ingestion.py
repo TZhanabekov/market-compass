@@ -119,6 +119,70 @@ class IngestionConfig:
     update_existing: bool = True
 
 
+@dataclass
+class RawIngestionStats:
+    """Statistics from a raw-only ingestion run (raw_offers buffer)."""
+
+    query: str
+    country_code: str
+    total_results: int
+    filtered_accessories: int
+    upserted_raw_offers: int
+    errors: int
+
+
+async def ingest_raw_offers_for_query(*, query: str, country_code: str) -> RawIngestionStats:
+    """Ingest SerpAPI google_shopping results into raw_offers only.
+
+    This is intended for scheduled refresh jobs. It avoids writing to `offers`
+    directly to prevent mis-attribution (raw_offers + reconcile owns promotion).
+    """
+    stats = RawIngestionStats(
+        query=query,
+        country_code=country_code.upper(),
+        total_results=0,
+        filtered_accessories=0,
+        upserted_raw_offers=0,
+        errors=0,
+    )
+
+    gl = COUNTRY_GL_MAP.get(stats.country_code, "us")
+    source_request_key = hashlib.sha256(f"{query}:{gl}:en:".encode()).hexdigest()[:64]
+
+    client = get_serpapi_client()
+    try:
+        results = await client.search_shopping(query=query, gl=gl)
+    except Exception as e:
+        logger.error(f"SerpAPI search failed (raw-only): {e}")
+        stats.errors = 1
+        return stats
+
+    stats.total_results = len(results)
+    if not results:
+        return stats
+
+    async with get_session() as session:
+        for r in results:
+            try:
+                if not is_iphone_product(r.title) or filter_non_iphone_products(r.title):
+                    stats.filtered_accessories += 1
+                    continue
+                extraction = extract_attributes(r.title)
+                await _upsert_raw_offer(
+                    session=session,
+                    result=r,
+                    country_code=stats.country_code,
+                    source_request_key=source_request_key,
+                    extraction=extraction,
+                )
+                stats.upserted_raw_offers += 1
+            except Exception as e:
+                logger.error(f"Raw-only processing failed for product_id={getattr(r, 'product_id', None)}: {e}")
+                stats.errors += 1
+
+    return stats
+
+
 async def ingest_offers_for_sku(
     sku_key: str,
     country_code: str,

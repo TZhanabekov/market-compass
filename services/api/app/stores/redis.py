@@ -16,6 +16,7 @@ TTL policies:
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 import redis.asyncio as redis
@@ -38,6 +39,7 @@ PREFIX_MERCHANT_URL = "merchant_url:"
 PREFIX_UI_PAYLOAD = "ui:"
 PREFIX_LOCK = "lock:"
 PREFIX_FX_RATES = "fx:rates:"
+PREFIX_METRICS = "metrics:"
 
 # Redis client (initialized on startup)
 _redis: redis.Redis | None = None
@@ -200,6 +202,25 @@ async def get_fx_rates_cache(base: str = "USD") -> dict[str, Any] | None:
 async def set_fx_rates_cache(base: str, payload: dict[str, Any]) -> None:
     """Cache FX rates payload for a base currency (TTL ~1 hour)."""
     await cache_set_json(f"{PREFIX_FX_RATES}{base.upper()}", payload, TTL_FX_RATES)
+
+
+# ============================================================
+# Metrics counters
+# ============================================================
+
+
+async def incr_daily_counter(name: str, *, ttl_seconds: int = 172800) -> int:
+    """Increment a UTC daily counter in Redis.
+
+    Example key: metrics:serpapi:shopping:20260117
+    """
+    date = datetime.now(timezone.utc).strftime("%Y%m%d")
+    key = f"{PREFIX_METRICS}{name}:{date}"
+    r = _get_redis()
+    value = await r.incr(key)
+    # Keep a little longer than 24h to cover delayed reads.
+    await r.expire(key, ttl_seconds)
+    return int(value)
 
 
 # ============================================================

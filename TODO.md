@@ -173,6 +173,10 @@ services/
 - [x] Ingestion service: SerpAPI → extraction → FX → dedup → DB
 - [x] Admin endpoint: `POST /v1/admin/ingest` для ручного тестирования
 - [ ] Scheduled refresh jobs (worker)
+- [ ] Scheduled refresh jobs (worker)
+  - [x] Определили бюджет: 11 стран × Q=6 × daily → ~66 SerpAPI calls/day (cache-miss)
+  - [ ] Cron job на Railway: `python -m scripts.refresh_daily` (raw-only ingest → reconcile)
+  - [ ] Добавить/проверить метрики SerpAPI calls/day (Redis counters `metrics:serpapi:*:YYYYMMDD`)
 - [ ] ⚠️ Удалить seed-данные и заменить реальными из SerpAPI
 - [x] Admin endpoint: `POST /v1/admin/reconcile` (dry-run by default) + debug logs
 - [x] Admin endpoint: `GET /v1/admin/raw-offers/{id|raw_offer_id}` — explain parsing/matching (incl. LLM attempted state)
@@ -199,10 +203,31 @@ services/
 
 ## Phase 5 — Admin & Observability
 
-- [ ] Admin panel для управления:
-  - [ ] iPhone models (16 Pro, 16 Pro Max, будущие модели)
-  - [ ] Golden SKUs (storage/color/condition варианты)
-  - [ ] Merchants (добавление, верификация, blacklist)
+- [ ] Admin Console (Web UI в `apps/web`) для управления текущим `/v1/admin/*`
+  - [ ] Security: добавить `ADMIN_TOKEN` и требовать `X-Admin-Token` для всех `/v1/admin/*` в production
+  - [ ] `/admin` (Next.js) — отдельный layout + навигация (Tabs/Sidebar)
+  - [ ] Dashboard:
+    - [ ] Health (`/health`)
+    - [ ] LLM config (`/v1/admin/debug/llm`)
+    - [ ] FX debug (`/v1/admin/debug/fx`)
+    - [ ] SerpAPI debug files list (`/v1/admin/debug/serpapi`)
+  - [ ] Ingestion UI (`POST /v1/admin/ingest`):
+    - [ ] форма (sku_key + country_code + min_confidence + toggles)
+    - [ ] вывод stats + “Copy JSON”
+  - [ ] Reconcile UI (`POST /v1/admin/reconcile`):
+    - [ ] форма (limit/dry_run/country_code)
+    - [ ] вывод stats + debug samples + LLM metrics
+  - [ ] Raw Offer Explain UI (`GET /v1/admin/raw-offers/{ref}`):
+    - [ ] форма (ref + include_candidates)
+    - [ ] секции: rawOffer/deterministic/catalog/llm/debug
+  - [ ] Golden SKUs UI:
+    - [ ] list (`GET /v1/admin/skus`)
+    - [ ] create (`POST /v1/admin/skus`)
+    - [ ] view (`GET /v1/admin/skus/{sku_key}`)
+  - [ ] Debug viewer:
+    - [ ] list/view SerpAPI debug JSON files
+  - [ ] Документация: `docs/13-admin-console.md`
+
 - [ ] Review queue для low-confidence matches
 - [ ] Sentry + Checkly + Vercel Analytics
 

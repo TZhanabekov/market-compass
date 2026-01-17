@@ -21,6 +21,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, asdict
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -31,6 +32,7 @@ from app.stores.redis import (
     cache_set_json,
     get_immersive_cache,
     set_immersive_cache,
+    incr_daily_counter,
     TTL_SHOPPING_CACHE,
     TTL_IMMERSIVE_CACHE,
 )
@@ -128,6 +130,11 @@ class SerpAPIClient:
 
         # Make API call
         logger.info(f"SerpAPI cache MISS, calling API for query={query}, gl={gl}")
+        try:
+            await incr_daily_counter("serpapi:shopping")
+        except Exception:
+            # Redis may be unavailable or readonly; do not fail ingestion.
+            pass
 
         params = {
             "engine": "google_shopping",
@@ -223,6 +230,10 @@ class SerpAPIClient:
 
         # Make API call
         logger.info(f"Immersive cache MISS, calling API for product_id={product_id}")
+        try:
+            await incr_daily_counter("serpapi:immersive")
+        except Exception:
+            pass
 
         params = {
             "engine": "google_immersive_product",
