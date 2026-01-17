@@ -47,6 +47,11 @@ class ReconcileStats:
     matched_existing_offer: int = 0
     created_offers: int = 0
     updated_raw_matches: int = 0
+    # LLM metrics (for budgeting/monitoring)
+    llm_budget: int = 0
+    llm_external_calls: int = 0
+    llm_reused: int = 0  # reused stored llm_chosen_sku_key without calling model
+    llm_skipped_budget: int = 0  # would call LLM but budget exhausted
 
 
 @dataclass
@@ -138,6 +143,25 @@ def _detect_is_contract(title: str) -> bool:
             "分割",
             "月額",
             "プラン",
+            # Korean
+            "약정",
+            "할부",
+            "월",
+            "요금제",
+            "플랜",
+            # Chinese
+            "合約",
+            "合约",
+            "月費",
+            "月费",
+            "分期",
+            "套餐",
+            # Arabic
+            "عقد",
+            "خطة",
+            "أقساط",
+            "اقساط",
+            "دفعات شهرية",
         ]
     )
 
@@ -265,11 +289,12 @@ async def reconcile_raw_offers(
     matched_raw_offer_ids: list[str] = []
     sample_reason_codes: list[str] = []
     settings = get_settings()
-    llm_calls = 0
+    llm_external_calls = 0
     llm_calls_budget = min(
         int(limit * settings.llm_max_fraction_per_reconcile),
         int(settings.llm_max_calls_per_reconcile),
     )
+    stats.llm_budget = max(0, int(llm_calls_budget))
 
     # FX is optional; if it fails, we still promote USD offers.
     fx_rates: FxRates | None = None
@@ -343,13 +368,15 @@ async def reconcile_raw_offers(
             if llm_attempted:
                 chosen_sku_key = stored_choice
                 llm_conf = stored_conf
+                if chosen_sku_key:
+                    stats.llm_reused += 1
 
             if (
                 settings.llm_enabled
                 and settings.openai_api_key
                 and model
                 and llm_calls_budget > 0
-                and llm_calls < llm_calls_budget
+                and llm_external_calls < llm_calls_budget
                 and not llm_attempted
             ):
                 cand_res = await session.execute(
@@ -360,7 +387,7 @@ async def reconcile_raw_offers(
                 )
                 candidates = [str(x) for x in cand_res.scalars().all()]
                 candidates_fingerprint = _candidates_fingerprint(candidates)
-                llm_calls += 1
+                llm_external_calls += 1
                 llm_res = await choose_sku_key_from_candidates(
                     title=title,
                     second_hand_condition=raw.second_hand_condition,
@@ -380,6 +407,15 @@ async def reconcile_raw_offers(
                     chosen_sku_key=chosen_sku_key,
                     match_confidence=llm_conf,
                 )
+            elif (
+                settings.llm_enabled
+                and settings.openai_api_key
+                and model
+                and not llm_attempted
+                and llm_calls_budget > 0
+                and llm_external_calls >= llm_calls_budget
+            ):
+                stats.llm_skipped_budget += 1
 
             if not chosen_sku_key:
                 stats.skipped_missing_attrs += 1
@@ -510,12 +546,14 @@ async def reconcile_raw_offers(
                 and settings.openai_api_key
                 and model
                 and llm_calls_budget > 0
-                and llm_calls < llm_calls_budget
+                and llm_external_calls < llm_calls_budget
             ):
                 llm_attempted, stored_choice, stored_conf = _get_llm_state(raw.parsed_attrs_json)
                 if llm_attempted:
                     chosen_sku_key = stored_choice
                     llm_conf = stored_conf
+                    if chosen_sku_key:
+                        stats.llm_reused += 1
                 else:
                     cand_query = (
                         select(GoldenSku.sku_key)
@@ -529,7 +567,7 @@ async def reconcile_raw_offers(
                     candidates = [str(x) for x in cand_res.scalars().all()]
                     candidates_fingerprint = _candidates_fingerprint(candidates)
 
-                    llm_calls += 1
+                    llm_external_calls += 1
                     llm_res = await choose_sku_key_from_candidates(
                         title=title,
                         second_hand_condition=raw.second_hand_condition,
@@ -548,6 +586,14 @@ async def reconcile_raw_offers(
                         chosen_sku_key=chosen_sku_key,
                         match_confidence=llm_conf,
                     )
+            elif (
+                settings.llm_enabled
+                and settings.openai_api_key
+                and model
+                and llm_calls_budget > 0
+                and llm_external_calls >= llm_calls_budget
+            ):
+                stats.llm_skipped_budget += 1
 
             if chosen_sku_key:
                 sku = (
@@ -667,5 +713,6 @@ async def reconcile_raw_offers(
         matched_raw_offer_ids=matched_raw_offer_ids,
         sample_reason_codes=sample_reason_codes,
     )
+    stats.llm_external_calls = int(llm_external_calls)
     return stats, debug
 

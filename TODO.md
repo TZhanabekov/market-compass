@@ -152,7 +152,7 @@ services/
   - [x] Candidate-set matching: LLM выбирает SKU только из списка кандидатов из БД, возвращает `match_confidence` (0..1)
   - [ ] Включение в проде через env (`LLM_ENABLED=true` + `OPENAI_API_KEY`) и мониторинг бюджета (calls/run)
   - [ ] Persist минимальные артефакты: `match_confidence` + (опц.) `match_reason_codes` / `trust_reason_codes`
-  - [ ] Budget policy: cap LLM calls per ingestion run (например <= 10–20% результатов)
+  - [x] Budget policy (reconcile): cap LLM calls per run + expose metrics in `/v1/admin/reconcile` stats/logs
 - [ ] Raw ingestion buffer (вариант A): сохранить все оплаченные результаты, даже если SKU ещё не существует
   - [x] Добавить таблицу `raw_offers` (Alembic migration) без обязательного `sku_id`
   - [x] Идемпотентность: unique key по `(source, country_code, source_product_id)` и fallback по hash(product_link)
@@ -166,7 +166,8 @@ services/
     - Реализация: `services/api/scripts/reconcile_raw_offers.py`
   - [ ] Словари для мультиязычности (минимальный набор): colors + accessory + contract + condition tokens (JP/DE/FR как старт)
     - [x] Базовые токены/паттерны для DE/FR/JP (colors/accessory/condition + contract flags)
-    - [ ] Расширить словари под HK/AE/SG/KR/AU/CA по мере появления реальных тайтлов
+    - [x] Добавлены базовые токены/паттерны для HK/AE/KR (colors/condition/accessory/contract)
+    - [ ] Расширить словари под SG/AU/CA по мере появления реальных тайтлов
 - [x] Trust Score (0-100) — базовый алгоритм
 - [x] Ranking по effective price
 - [x] Ingestion service: SerpAPI → extraction → FX → dedup → DB

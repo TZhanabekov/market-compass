@@ -167,6 +167,42 @@ _COLOR_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"ゴールド", re.IGNORECASE), "gold"),
     (re.compile(r"ナチュラル\s*チタニウム|ナチュラルチタニウム", re.IGNORECASE), "natural"),
     (re.compile(r"デザート\s*チタニウム|デザートチタニウム", re.IGNORECASE), "desert"),
+    # Korean (KR)
+    (re.compile(r"딥\s*블루|딥블루", re.IGNORECASE), "deep-blue"),
+    (re.compile(r"코스믹\s*오렌지|코즈믹\s*오렌지", re.IGNORECASE), "cosmic-orange"),
+    (re.compile(r"블랙", re.IGNORECASE), "black"),
+    (re.compile(r"화이트", re.IGNORECASE), "white"),
+    (re.compile(r"블루", re.IGNORECASE), "blue"),
+    (re.compile(r"그린", re.IGNORECASE), "green"),
+    (re.compile(r"핑크", re.IGNORECASE), "pink"),
+    (re.compile(r"옐로", re.IGNORECASE), "yellow"),
+    (re.compile(r"레드", re.IGNORECASE), "red"),
+    (re.compile(r"퍼플", re.IGNORECASE), "purple"),
+    (re.compile(r"실버", re.IGNORECASE), "silver"),
+    (re.compile(r"골드", re.IGNORECASE), "gold"),
+    # Chinese (HK/SG) - prefer explicit color words to reduce false positives
+    (re.compile(r"深[藍蓝]", re.IGNORECASE), "deep-blue"),
+    (re.compile(r"黑色", re.IGNORECASE), "black"),
+    (re.compile(r"白色", re.IGNORECASE), "white"),
+    (re.compile(r"(?:藍色|蓝色)", re.IGNORECASE), "blue"),
+    (re.compile(r"(?:綠色|绿色)", re.IGNORECASE), "green"),
+    (re.compile(r"粉紅|粉红|粉色", re.IGNORECASE), "pink"),
+    (re.compile(r"(?:黃色|黄色)", re.IGNORECASE), "yellow"),
+    (re.compile(r"(?:紅色|红色)", re.IGNORECASE), "red"),
+    (re.compile(r"紫色", re.IGNORECASE), "purple"),
+    (re.compile(r"(?:銀色|银色)", re.IGNORECASE), "silver"),
+    (re.compile(r"金色", re.IGNORECASE), "gold"),
+    # Arabic (AE)
+    (re.compile(r"أسود", re.IGNORECASE), "black"),
+    (re.compile(r"أبيض", re.IGNORECASE), "white"),
+    (re.compile(r"أزرق", re.IGNORECASE), "blue"),
+    (re.compile(r"أخضر", re.IGNORECASE), "green"),
+    (re.compile(r"وردي", re.IGNORECASE), "pink"),
+    (re.compile(r"أصفر", re.IGNORECASE), "yellow"),
+    (re.compile(r"أحمر", re.IGNORECASE), "red"),
+    (re.compile(r"بنفسجي", re.IGNORECASE), "purple"),
+    (re.compile(r"فضي", re.IGNORECASE), "silver"),
+    (re.compile(r"ذهبي", re.IGNORECASE), "gold"),
     # Product RED
     (re.compile(r"\(product\)\s*red", re.IGNORECASE), "red"),
     (re.compile(r"product\s*red", re.IGNORECASE), "red"),
@@ -193,6 +229,18 @@ _CONDITION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"整備済み|再生品|リファービッシュ", re.IGNORECASE), "refurbished"),
     (re.compile(r"中古", re.IGNORECASE), "used"),
     (re.compile(r"新品|未使用", re.IGNORECASE), "new"),
+    # Korean
+    (re.compile(r"리퍼|리퍼비시|재생", re.IGNORECASE), "refurbished"),
+    (re.compile(r"중고", re.IGNORECASE), "used"),
+    (re.compile(r"새상품|미개봉|새\s*제품", re.IGNORECASE), "new"),
+    # Chinese
+    (re.compile(r"翻新|翻新機|翻新机", re.IGNORECASE), "refurbished"),
+    (re.compile(r"二手", re.IGNORECASE), "used"),
+    (re.compile(r"全新|新品", re.IGNORECASE), "new"),
+    # Arabic
+    (re.compile(r"مجدد", re.IGNORECASE), "refurbished"),
+    (re.compile(r"مستعمل", re.IGNORECASE), "used"),
+    (re.compile(r"جديد", re.IGNORECASE), "new"),
 ]
 
 
@@ -346,7 +394,7 @@ def is_iphone_product(title: str) -> bool:
         True if title contains iPhone reference.
     """
     # Include a few common non-Latin spellings seen in local marketplaces.
-    return bool(re.search(r"(?:\biphone\b|アイフォン|アイフォーン)", title, re.IGNORECASE))
+    return bool(re.search(r"(?:\biphone\b|アイフォン|アイフォーン|아이폰)", title, re.IGNORECASE))
 
 
 def filter_non_iphone_products(title: str) -> bool:
@@ -409,6 +457,34 @@ def filter_non_iphone_products(title: str) -> bool:
         r"充電器",
         r"ケーブル",
         r"アダプター",
+        # Korean
+        r"케이스",
+        r"커버",
+        r"보호필름",
+        r"강화유리",
+        r"충전기",
+        r"케이블",
+        r"어댑터",
+        r"이어폰",
+        r"헤드폰",
+        r"거치대",
+        # Chinese (HK/SG)
+        r"保護殼|保护壳|手機殼|手机壳",
+        r"保護套|保护套",
+        r"保護膜|保护膜|貼膜|贴膜",
+        r"玻璃貼|玻璃贴",
+        r"充電器|充电器",
+        r"數據線|数据线",
+        r"轉接器|转接器",
+        r"耳機|耳机",
+        # Arabic (AE)
+        r"جراب",
+        r"غطاء",
+        r"واقي\s*شاشة|واقي",
+        r"شاحن",
+        r"كابل",
+        r"محول",
+        r"سماعات",
     ]
 
     for pattern in exclusion_patterns:

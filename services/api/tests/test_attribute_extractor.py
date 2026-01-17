@@ -129,6 +129,17 @@ class TestExtractColor:
         assert extract_color("アップル Iphone 17 Pro ディープブルー") == "deep-blue"
         assert extract_color("アップル Iphone 17 Pro コズミックオレンジ") == "cosmic-orange"
 
+    def test_korean_colors(self):
+        assert extract_color("아이폰 17 프로 256GB 딥블루") == "deep-blue"
+        assert extract_color("아이폰 16 블랙") == "black"
+
+    def test_chinese_colors(self):
+        assert extract_color("iPhone 16 黑色 256GB") == "black"
+        assert extract_color("iPhone 17 Pro 深藍 256GB") == "deep-blue"
+
+    def test_arabic_colors(self):
+        assert extract_color("iPhone 16 أسود") == "black"
+
     def test_iphone_17_colors(self):
         """Test iPhone 17 Pro colors (2025)."""
         assert extract_color("iPhone 17 Pro Deep Blue") == "deep-blue"
@@ -187,6 +198,21 @@ class TestExtractCondition:
         assert extract_condition("iPhone 16 Pro 中古") == "used"
         assert extract_condition("iPhone 16 Pro 整備済み") == "refurbished"
 
+    def test_korean_conditions(self):
+        assert extract_condition("iPhone 16 Pro 새상품") == "new"
+        assert extract_condition("iPhone 16 Pro 중고") == "used"
+        assert extract_condition("iPhone 16 Pro 리퍼") == "refurbished"
+
+    def test_chinese_conditions(self):
+        assert extract_condition("iPhone 16 Pro 全新") == "new"
+        assert extract_condition("iPhone 16 Pro 二手") == "used"
+        assert extract_condition("iPhone 16 Pro 翻新") == "refurbished"
+
+    def test_arabic_conditions(self):
+        assert extract_condition("iPhone 16 Pro جديد") == "new"
+        assert extract_condition("iPhone 16 Pro مستعمل") == "used"
+        assert extract_condition("iPhone 16 Pro مجدد") == "refurbished"
+
     def test_default_to_new(self):
         # If no condition specified, default to "new"
         assert extract_condition("iPhone 16 Pro 256GB Black") == "new"
@@ -234,6 +260,7 @@ class TestIsIphoneProduct:
         assert is_iphone_product("IPHONE 16") is True
         assert is_iphone_product("New iPhone 15 Pro Max") is True
         assert is_iphone_product("Apple アイフォン 16 Pro") is True
+        assert is_iphone_product("애플 아이폰 16 Pro") is True
 
     def test_not_iphone(self):
         assert is_iphone_product("Samsung Galaxy S24") is False
@@ -260,6 +287,9 @@ class TestFilterNonIphoneProducts:
         assert filter_non_iphone_products("iPhone 16 Hülle") is True
         assert filter_non_iphone_products("iPhone 16 Coque") is True
         assert filter_non_iphone_products("iPhone 16 ケース") is True
+        assert filter_non_iphone_products("iPhone 16 케이스") is True
+        assert filter_non_iphone_products("iPhone 16 手机壳") is True
+        assert filter_non_iphone_products("iPhone 16 جراب") is True
 
     def test_allows_actual_iphones(self):
         assert filter_non_iphone_products("Apple iPhone 16 Pro Max 256GB") is False

@@ -168,13 +168,17 @@ async def trigger_reconcile(request: ReconcileRequest) -> ReconcileResponse:
                 logger.info(f"[reconcile] dry-run rollback run_id={run_id}")
 
         logger.info(
-            "[reconcile] done run_id=%s scanned=%s created_offers=%s updated_raw=%s skipped_no_sku=%s skipped_fx=%s",
+            "[reconcile] done run_id=%s scanned=%s created_offers=%s updated_raw=%s skipped_no_sku=%s skipped_fx=%s llm_calls=%s llm_budget=%s llm_reused=%s llm_skipped_budget=%s",
             run_id,
             stats.scanned,
             stats.created_offers,
             stats.updated_raw_matches,
             stats.skipped_no_sku,
             stats.skipped_fx,
+            stats.llm_external_calls,
+            stats.llm_budget,
+            stats.llm_reused,
+            stats.llm_skipped_budget,
         )
 
         return ReconcileResponse(
@@ -193,6 +197,10 @@ async def trigger_reconcile(request: ReconcileRequest) -> ReconcileResponse:
                 "matched_existing_offer": stats.matched_existing_offer,
                 "created_offers": stats.created_offers,
                 "updated_raw_matches": stats.updated_raw_matches,
+                "llm_budget": stats.llm_budget,
+                "llm_external_calls": stats.llm_external_calls,
+                "llm_reused": stats.llm_reused,
+                "llm_skipped_budget": stats.llm_skipped_budget,
             },
             debug={
                 "created_offer_ids": debug.created_offer_ids,
