@@ -158,10 +158,11 @@ services/
   - [x] Писать туда все non-accessory результаты `google_shopping` (включая “не тот цвет/память”) — параллельно текущему ingestion
   - [x] Multi-variant detector (v1): если title перечисляет несколько storage → пометить `is_multi_variant=true`, **не вызывать LLM**, не промоутить в `offers`
   - [x] Contract/plan detector (v1): пометить `is_contract=true` (и исключить из leaderboard по продуктовой политике)
-  - [ ] Reconciliation job/service: пытаться промоутить `raw_offers` → `offers`, когда
+  - [x] Reconciliation job/service (v1, deterministic-only): промоутить `raw_offers` → `offers`, когда
     - появился соответствующий Golden SKU
     - улучшился deterministic/LLM парсер
     (без повторных SerpAPI запросов)
+    - Реализация: `services/api/scripts/reconcile_raw_offers.py`
   - [ ] Словари для мультиязычности (минимальный набор): colors + accessory + contract + condition tokens (JP/DE/FR как старт)
 - [x] Trust Score (0-100) — базовый алгоритм
 - [x] Ranking по effective price
