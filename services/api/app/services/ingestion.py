@@ -167,8 +167,9 @@ async def ingest_offers_for_sku(
     # 2. Get FX rates for price conversion
     try:
         fx_rates = await get_latest_fx_rates(base="USD")
+        logger.info(f"FX rates available: {len(fx_rates.rates)} currencies, EUR={fx_rates.rates.get('EUR')}")
     except Exception as e:
-        logger.warning(f"Failed to fetch FX rates: {e}, continuing without conversion")
+        logger.error(f"Failed to fetch FX rates: {e}. All non-USD offers will be skipped!")
         fx_rates = None
 
     # 3. Process each result
