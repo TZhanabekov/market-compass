@@ -170,6 +170,7 @@ services/
 - [x] Admin endpoint: `POST /v1/admin/ingest` для ручного тестирования
 - [ ] Scheduled refresh jobs (worker)
 - [ ] ⚠️ Удалить seed-данные и заменить реальными из SerpAPI
+- [ ] Admin endpoint: `POST /v1/admin/reconcile` (dry-run by default) + debug logs
 
 ---
 

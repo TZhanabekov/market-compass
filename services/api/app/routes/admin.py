@@ -4,11 +4,15 @@ These endpoints are intended for manual testing and admin operations.
 In production, consider adding authentication (API key or admin token).
 """
 
+import logging
+from uuid import uuid4
+
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.models import GoldenSku
+from app.services.reconciliation import reconcile_raw_offers
 from app.services.dedup import compute_sku_key
 from app.services.ingestion import (
     IngestionConfig,
@@ -23,6 +27,7 @@ from app.stores.postgres import get_session
 from sqlalchemy import select
 
 router = APIRouter()
+logger = logging.getLogger("uvicorn.error")
 
 
 class IngestionRequest(BaseModel):
@@ -112,6 +117,91 @@ async def get_supported_countries() -> dict:
         "countries": list(COUNTRY_GL_MAP.keys()),
         "default": "US",
     }
+
+class ReconcileRequest(BaseModel):
+    """Request body for reconciliation endpoint."""
+
+    limit: int = 500
+    dry_run: bool = True
+    country_code: str | None = None
+
+
+class ReconcileResponse(BaseModel):
+    """Response from reconciliation endpoint."""
+
+    success: bool
+    run_id: str
+    dry_run: bool
+    country_code: str | None
+    stats: dict
+    debug: dict
+
+
+@router.post("/reconcile", response_model=ReconcileResponse)
+async def trigger_reconcile(request: ReconcileRequest) -> ReconcileResponse:
+    """Promote eligible raw_offers into offers.
+
+    This is deterministic-only reconciliation. By default it runs in dry-run mode
+    (rolls back changes) to avoid accidental writes in production.
+    """
+    run_id = str(uuid4())
+    limit = max(1, min(int(request.limit), 5000))
+    country_code = request.country_code.upper() if request.country_code else None
+
+    logger.info(
+        f"[reconcile] start run_id={run_id} limit={limit} dry_run={request.dry_run} country_code={country_code}"
+    )
+
+    try:
+        async with get_session() as session:
+            stats, debug = await reconcile_raw_offers(
+                session=session,
+                limit=limit,
+                country_code=country_code,
+            )
+
+            # get_session() auto-commits on exit, so for dry runs we explicitly rollback
+            # to ensure no writes are persisted.
+            if request.dry_run:
+                await session.rollback()
+                logger.info(f"[reconcile] dry-run rollback run_id={run_id}")
+
+        logger.info(
+            "[reconcile] done run_id=%s scanned=%s created_offers=%s updated_raw=%s skipped_no_sku=%s skipped_fx=%s",
+            run_id,
+            stats.scanned,
+            stats.created_offers,
+            stats.updated_raw_matches,
+            stats.skipped_no_sku,
+            stats.skipped_fx,
+        )
+
+        return ReconcileResponse(
+            success=True,
+            run_id=run_id,
+            dry_run=request.dry_run,
+            country_code=country_code,
+            stats={
+                "scanned": stats.scanned,
+                "skipped_multi_variant": stats.skipped_multi_variant,
+                "skipped_contract": stats.skipped_contract,
+                "skipped_missing_attrs": stats.skipped_missing_attrs,
+                "skipped_no_sku": stats.skipped_no_sku,
+                "skipped_fx": stats.skipped_fx,
+                "dedup_conflict": stats.dedup_conflict,
+                "matched_existing_offer": stats.matched_existing_offer,
+                "created_offers": stats.created_offers,
+                "updated_raw_matches": stats.updated_raw_matches,
+            },
+            debug={
+                "created_offer_ids": debug.created_offer_ids,
+                "matched_raw_offer_ids": debug.matched_raw_offer_ids,
+                "sample_reason_codes": debug.sample_reason_codes,
+            },
+        )
+    except Exception as e:
+        logger.exception(f"[reconcile] failed run_id={run_id}")
+        raise HTTPException(status_code=500, detail=f"Reconciliation failed: {str(e)}")
 
 
 # ============================================================

@@ -103,7 +103,7 @@ class TestExtractColor:
         assert extract_color("iPhone 16 Pro Desert Titanium") == "desert"
 
     def test_space_colors(self):
-        assert extract_color("iPhone 15 Space Black") == "black"
+        assert extract_color("iPhone 15 Space Black") == "space-black"
         assert extract_color("iPhone 14 Space Gray") == "gray"
         assert extract_color("iPhone 14 Space Grey") == "gray"
 
