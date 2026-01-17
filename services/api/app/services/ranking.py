@@ -12,36 +12,12 @@ Risk slider:
 """
 
 import json
-from collections.abc import AsyncGenerator
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.models import Offer, GoldenSku
 from app.schemas import Deal, GuideStep
-from app.settings import get_settings
-
-# Database connection (will be managed by app lifespan in production)
-_engine = None
-_session_factory = None
-
-
-async def _get_session() -> AsyncSession:
-    """Get database session."""
-    global _engine, _session_factory
-
-    if _engine is None:
-        settings = get_settings()
-        _engine = create_async_engine(
-            settings.async_database_url,
-            echo=settings.debug,
-            connect_args=settings.asyncpg_connect_args,
-        )
-        _session_factory = async_sessionmaker(
-            _engine, class_=AsyncSession, expire_on_commit=False
-        )
-
-    return _session_factory()
+from app.stores.postgres import get_session
 
 
 # Country code to flag emoji mapping
@@ -74,9 +50,7 @@ async def get_top_deals(
     Returns:
         List of Deal objects, sorted by effective_price_usd ASC, trust_score DESC.
     """
-    session = await _get_session()
-
-    try:
+    async with get_session() as session:
         # Find the SKU
         sku_result = await session.execute(
             select(GoldenSku).where(GoldenSku.sku_key == sku_key)
@@ -141,9 +115,6 @@ async def get_top_deals(
 
         return deals
 
-    finally:
-        await session.close()
-
 
 async def get_total_offer_count(sku_key: str) -> int:
     """Get total number of offers for a SKU (before filtering).
@@ -154,9 +125,7 @@ async def get_total_offer_count(sku_key: str) -> int:
     Returns:
         Total offer count.
     """
-    session = await _get_session()
-
-    try:
+    async with get_session() as session:
         # Find the SKU
         sku_result = await session.execute(
             select(GoldenSku).where(GoldenSku.sku_key == sku_key)
@@ -173,9 +142,6 @@ async def get_total_offer_count(sku_key: str) -> int:
             select(func.count(Offer.id)).where(Offer.sku_id == sku.id)
         )
         return count_result.scalar() or 0
-
-    finally:
-        await session.close()
 
 
 async def calculate_effective_price(
