@@ -136,6 +136,7 @@ services/
 - [ ] Интеграция с openexchangerates API (FX service)
 - [ ] Кеширование в Redis (TTL ~1 час)
 - [x] Добавлен FX сервис + Redis cache helpers (готово к подключению в ingestion/пересчёт price_usd)
+- [x] Debug endpoint: `/v1/admin/debug/fx` для диагностики отсутствующих курсов (например EUR)
 
 ---
 

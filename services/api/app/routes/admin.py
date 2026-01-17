@@ -18,6 +18,7 @@ from app.services.ingestion import (
 )
 from app.services.attribute_extractor import ExtractionConfidence
 from app.services.debug_storage import list_debug_files, get_debug_file
+from app.services.fx import FxError, _fetch_openexchangerates_latest, _parse_openexchangerates_latest
 from app.stores.postgres import get_session
 from sqlalchemy import select
 
@@ -291,3 +292,47 @@ async def get_serpapi_debug_file(filename: str) -> JSONResponse:
         raise HTTPException(status_code=404, detail=f"Debug file not found: {filename}")
 
     return JSONResponse(content=content)
+
+
+# ============================================================
+# Debug: FX / OpenExchangeRates
+# ============================================================
+
+
+@router.get("/debug/fx")
+async def debug_fx() -> dict:
+    """Debug OpenExchangeRates response shape (sanitized).
+
+    This helps diagnose issues like missing EUR rate in production without logging secrets.
+    """
+    try:
+        raw = await _fetch_openexchangerates_latest()
+        parsed = _parse_openexchangerates_latest(raw)
+
+        rates_raw = raw.get("rates", {})
+        keys = sorted([str(k).upper() for k in rates_raw.keys()]) if isinstance(rates_raw, dict) else []
+        eur_raw = rates_raw.get("EUR") if isinstance(rates_raw, dict) else None
+        eur_parsed = parsed.rates.get("EUR")
+
+        # Surface common error fields when OXR returns error payloads
+        error_payload = None
+        if isinstance(raw, dict) and raw.get("error"):
+            error_payload = {
+                "error": raw.get("error"),
+                "status": raw.get("status"),
+                "message": raw.get("message"),
+                "description": raw.get("description"),
+            }
+
+        return {
+            "ok": True,
+            "base": parsed.base,
+            "timestamp": parsed.timestamp,
+            "rates_count": len(parsed.rates),
+            "eur_raw": eur_raw,
+            "eur_parsed": eur_parsed,
+            "sample_rate_keys": keys[:25],
+            "error_payload": error_payload,
+        }
+    except FxError as e:
+        return {"ok": False, "error": {"code": "FX_DEBUG_FAILED", "message": str(e), "detail": {}}}
