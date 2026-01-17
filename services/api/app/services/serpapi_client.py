@@ -345,9 +345,15 @@ class SerpAPIClient:
 
         Tries multiple sources:
         1. item.currency (direct field) - normalize if it's a symbol
-        2. alternative_price.currency - normalize if it's a symbol
-        3. Parse from price string (¥, $, €, etc.)
-        4. Infer from gl parameter (gl=jp → JPY, gl=de → EUR, etc.)
+        2. Parse from price string (¥, $, €, etc.)
+        3. Infer from gl parameter (gl=jp → JPY, gl=de → EUR, etc.)
+        4. alternative_price.currency - LAST RESORT only
+
+        Rationale:
+        - We store `price` from `extracted_price` (which corresponds to `item.price`),
+          so currency must match the primary `item.price` field.
+        - SerpAPI sometimes provides `alternative_price` in a different currency; using
+          its currency alongside the primary extracted price would corrupt amounts.
 
         Args:
             item: Shopping result item from SerpAPI.
@@ -368,7 +374,19 @@ class SerpAPIClient:
             if len(currency_str) >= 3:
                 return currency_str.upper()
 
-        # 2. Alternative price currency
+        # 2. Parse from price string
+        price_str = item.get("price", "")
+        if isinstance(price_str, str):
+            currency_from_symbol = self._currency_from_symbol(price_str)
+            if currency_from_symbol:
+                return currency_from_symbol
+
+        # 3. Infer from gl parameter
+        inferred = self._currency_from_gl(gl)
+        if inferred:
+            return inferred
+
+        # 4. Alternative price currency (last resort)
         alt_price = item.get("alternative_price", {})
         if isinstance(alt_price, dict):
             alt_currency = alt_price.get("currency")
@@ -380,15 +398,7 @@ class SerpAPIClient:
                 if len(alt_currency_str) >= 3:
                     return alt_currency_str.upper()
 
-        # 3. Parse from price string
-        price_str = item.get("price", "")
-        if isinstance(price_str, str):
-            currency_from_symbol = self._currency_from_symbol(price_str)
-            if currency_from_symbol:
-                return currency_from_symbol
-
-        # 4. Infer from gl parameter
-        return self._currency_from_gl(gl)
+        return "USD"
 
     def _normalize_currency_symbol(self, symbol: str) -> str | None:
         """Normalize currency symbol to ISO 4217 code.
@@ -494,14 +504,14 @@ class SerpAPIClient:
         first_char = price_str[0]
         return symbol_map.get(first_char)
 
-    def _currency_from_gl(self, gl: str) -> str:
+    def _currency_from_gl(self, gl: str) -> str | None:
         """Infer currency from Google country code (gl parameter).
 
         Args:
             gl: Google country code (e.g., "jp", "us", "de").
 
         Returns:
-            Default currency code for that country.
+            Default currency code for that country, or None if unknown.
         """
         gl_lower = gl.lower()
         gl_to_currency = {
@@ -560,7 +570,7 @@ class SerpAPIClient:
             "bd": "BDT",  # Bangladesh
             "ng": "NGN",  # Nigeria
         }
-        return gl_to_currency.get(gl_lower, "USD")
+        return gl_to_currency.get(gl_lower)
 
     def _parse_immersive_result(
         self, data: dict[str, Any], product_id: str

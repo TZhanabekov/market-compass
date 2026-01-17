@@ -30,5 +30,5 @@ async def test_convert_to_usd_uses_provided_rates():
 async def test_convert_to_usd_missing_rate_raises():
     rates = FxRates(base="USD", timestamp=1, rates={"USD": 1.0})
     with pytest.raises(FxError):
-        await convert_to_usd(10.0, "GBP", rates=rates)
+        await convert_to_usd(10.0, "GBP", rates=rates, retry_on_missing_rate=False)
 

@@ -143,6 +143,7 @@ services/
 
 - [x] SerpAPI клиент (структура для google_shopping + immersive)
 - [x] Реальные вызовы SerpAPI (с кешированием в Redis, TTL 1-6h)
+- [x] Fix: корректный выбор валюты для `extracted_price` (не использовать `alternative_price.currency`, если primary price в другой валюте)
 - [x] Regex extraction для атрибутов iPhone (model/storage/color/condition)
 - [ ] GPT-4o-mini fallback для сложных случаев (low-confidence)
 - [x] Trust Score (0-100) — базовый алгоритм
