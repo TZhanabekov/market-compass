@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from app.models import GoldenSku
 from app.services.reconciliation import reconcile_raw_offers
 from app.services.dedup import compute_sku_key
+from app.services.raw_offer_explain import explain_raw_offer, get_raw_offer_by_ref
 from app.services.ingestion import (
     IngestionConfig,
     IngestionStats,
@@ -202,6 +203,31 @@ async def trigger_reconcile(request: ReconcileRequest) -> ReconcileResponse:
     except Exception as e:
         logger.exception(f"[reconcile] failed run_id={run_id}")
         raise HTTPException(status_code=500, detail=f"Reconciliation failed: {str(e)}")
+
+
+class RawOfferExplainResponse(BaseModel):
+    """Debug response for raw_offers explain endpoint."""
+
+    rawOffer: dict
+    deterministic: dict
+    catalog: dict
+    llm: dict
+    debug: dict
+
+
+@router.get("/raw-offers/{raw_offer_ref}", response_model=RawOfferExplainResponse)
+async def explain_raw_offer_endpoint(
+    raw_offer_ref: str,
+    include_candidates: bool = Query(default=False, description="Include SKU candidates from catalog"),
+) -> RawOfferExplainResponse:
+    """Explain how a raw_offers row would be parsed/matched."""
+    logger.info(f"[raw-offers:explain] ref={raw_offer_ref} include_candidates={include_candidates}")
+    async with get_session() as session:
+        raw = await get_raw_offer_by_ref(session, raw_offer_ref)
+        if not raw:
+            raise HTTPException(status_code=404, detail=f"RawOffer not found: {raw_offer_ref}")
+        payload = await explain_raw_offer(session=session, raw_offer=raw, include_candidates=include_candidates)
+        return RawOfferExplainResponse(**payload)
 
 
 # ============================================================

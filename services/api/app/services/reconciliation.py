@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -141,6 +142,76 @@ def _detect_is_contract(title: str) -> bool:
     )
 
 
+def _json_load_or_empty(value: str | None) -> dict[str, Any]:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def _candidates_fingerprint(candidates: list[str]) -> str | None:
+    if not candidates:
+        return None
+    h = hashlib.sha256()
+    for c in candidates:
+        h.update(c.encode("utf-8"))
+        h.update(b"\x00")
+    return h.hexdigest()[:40]
+
+
+def _snapshot_parsed_attrs(
+    *,
+    existing_json: str | None,
+    extraction,
+    second_hand_condition: str | None,
+    normalized_condition: str,
+) -> str:
+    """Merge deterministic snapshot into parsed_attrs_json without losing LLM fields."""
+    snap = _json_load_or_empty(existing_json)
+    snap["extraction"] = {
+        "attributes": extraction.attributes,
+        "confidence": extraction.confidence.value,
+    }
+    snap["second_hand_condition"] = second_hand_condition
+    snap["normalized_condition"] = normalized_condition
+    return json.dumps(snap, ensure_ascii=False)
+
+
+def _get_llm_state(parsed_attrs_json: str | None) -> tuple[bool, str | None, float | None]:
+    """Return (attempted, chosen_sku_key, match_confidence)."""
+    snap = _json_load_or_empty(parsed_attrs_json)
+    attempted = bool(snap.get("llm_attempted") is True)
+    chosen = snap.get("llm_chosen_sku_key")
+    chosen_s = str(chosen) if isinstance(chosen, str) and chosen.strip() else None
+    conf = snap.get("llm_match_confidence")
+    conf_f = float(conf) if isinstance(conf, (int, float)) else None
+    return attempted, chosen_s, conf_f
+
+
+def _mark_llm_attempt(
+    parsed_attrs_json: str | None,
+    *,
+    candidates_count: int,
+    candidates_fingerprint: str | None,
+    llm_payload: dict[str, Any] | None,
+    chosen_sku_key: str | None,
+    match_confidence: float | None,
+) -> str:
+    snap = _json_load_or_empty(parsed_attrs_json)
+    snap["llm_attempted"] = True
+    snap["llm_candidates_count"] = candidates_count
+    if candidates_fingerprint:
+        snap["llm_candidates_fingerprint"] = candidates_fingerprint
+    snap["llm_chosen_sku_key"] = chosen_sku_key
+    snap["llm_match_confidence"] = match_confidence
+    if llm_payload is not None:
+        snap["llm"] = llm_payload
+    return json.dumps(snap, ensure_ascii=False)
+
+
 async def _find_or_create_merchant(session: AsyncSession, merchant_name: str) -> Merchant:
     normalized = merchant_name.lower().strip()
     res = await session.execute(select(Merchant).where(Merchant.normalized_name == normalized))
@@ -254,16 +325,11 @@ async def reconcile_raw_offers(
         condition = _normalize_condition(raw.second_hand_condition)
 
         # Snapshot parsed artifacts for later iterations/debugging.
-        raw.parsed_attrs_json = json.dumps(
-            {
-                "extraction": {
-                    "attributes": extraction.attributes,
-                    "confidence": extraction.confidence.value,
-                },
-                "second_hand_condition": raw.second_hand_condition,
-                "normalized_condition": condition,
-            },
-            ensure_ascii=False,
+        raw.parsed_attrs_json = _snapshot_parsed_attrs(
+            existing_json=raw.parsed_attrs_json,
+            extraction=extraction,
+            second_hand_condition=raw.second_hand_condition,
+            normalized_condition=condition,
         )
         raw.flags_json = json.dumps({"is_multi_variant": False, "is_contract": False}, ensure_ascii=False)
 
@@ -273,6 +339,10 @@ async def reconcile_raw_offers(
             chosen_sku_key: str | None = None
             llm_payload: dict[str, Any] | None = None
             llm_conf: float | None = None
+            llm_attempted, stored_choice, stored_conf = _get_llm_state(raw.parsed_attrs_json)
+            if llm_attempted:
+                chosen_sku_key = stored_choice
+                llm_conf = stored_conf
 
             if (
                 settings.llm_enabled
@@ -280,6 +350,7 @@ async def reconcile_raw_offers(
                 and model
                 and llm_calls_budget > 0
                 and llm_calls < llm_calls_budget
+                and not llm_attempted
             ):
                 cand_res = await session.execute(
                     select(GoldenSku.sku_key)
@@ -288,6 +359,7 @@ async def reconcile_raw_offers(
                     .limit(50)
                 )
                 candidates = [str(x) for x in cand_res.scalars().all()]
+                candidates_fingerprint = _candidates_fingerprint(candidates)
                 llm_calls += 1
                 llm_res = await choose_sku_key_from_candidates(
                     title=title,
@@ -299,6 +371,15 @@ async def reconcile_raw_offers(
                     chosen_sku_key = llm_res.sku_key
                     llm_payload = llm_res.raw
                     llm_conf = llm_res.match_confidence
+                # Mark attempt regardless of success to ensure we don't re-call next run.
+                raw.parsed_attrs_json = _mark_llm_attempt(
+                    raw.parsed_attrs_json,
+                    candidates_count=len(candidates),
+                    candidates_fingerprint=candidates_fingerprint,
+                    llm_payload=llm_payload,
+                    chosen_sku_key=chosen_sku_key,
+                    match_confidence=llm_conf,
+                )
 
             if not chosen_sku_key:
                 stats.skipped_missing_attrs += 1
@@ -306,15 +387,6 @@ async def reconcile_raw_offers(
                 if len(sample_reason_codes) < debug_sample_limit:
                     sample_reason_codes.append("MISSING_REQUIRED_ATTRS")
                 continue
-
-            # Store LLM evidence into parsed snapshot for later auditing
-            try:
-                existing_snapshot = json.loads(raw.parsed_attrs_json or "{}")
-                if isinstance(existing_snapshot, dict):
-                    existing_snapshot["llm"] = llm_payload
-                    raw.parsed_attrs_json = json.dumps(existing_snapshot, ensure_ascii=False)
-            except Exception:
-                pass
 
             sku = (await session.execute(select(GoldenSku).where(GoldenSku.sku_key == chosen_sku_key))).scalar_one_or_none()
             if not sku:
@@ -425,11 +497,75 @@ async def reconcile_raw_offers(
         sku_key = compute_sku_key({"model": model, "storage": storage, "color": color, "condition": condition})
         sku = (await session.execute(select(GoldenSku).where(GoldenSku.sku_key == sku_key))).scalar_one_or_none()
         if not sku:
-            stats.skipped_no_sku += 1
-            raw.match_reason_codes_json = json.dumps(["SKU_NOT_IN_CATALOG"], ensure_ascii=False)
-            if len(sample_reason_codes) < debug_sample_limit:
-                sample_reason_codes.append("SKU_NOT_IN_CATALOG")
-            continue
+            # If deterministic sku_key doesn't exist, try LLM fallback (candidate-set matching)
+            # before declaring SKU_NOT_IN_CATALOG. This covers cases where a generic color token
+            # was extracted (e.g. "blue") but the catalog uses a more specific color
+            # (e.g. "deep-blue"), or when titles are non-English.
+            chosen_sku_key: str | None = None
+            llm_payload: dict[str, object] | None = None
+            llm_conf: float | None = None
+
+            if (
+                settings.llm_enabled
+                and settings.openai_api_key
+                and model
+                and llm_calls_budget > 0
+                and llm_calls < llm_calls_budget
+            ):
+                llm_attempted, stored_choice, stored_conf = _get_llm_state(raw.parsed_attrs_json)
+                if llm_attempted:
+                    chosen_sku_key = stored_choice
+                    llm_conf = stored_conf
+                else:
+                    cand_query = (
+                        select(GoldenSku.sku_key)
+                        .where(GoldenSku.model == model)
+                        .where(GoldenSku.condition == condition)
+                    )
+                    # If storage is known, narrow candidates further
+                    if storage:
+                        cand_query = cand_query.where(GoldenSku.storage == storage)
+                    cand_res = await session.execute(cand_query.limit(50))
+                    candidates = [str(x) for x in cand_res.scalars().all()]
+                    candidates_fingerprint = _candidates_fingerprint(candidates)
+
+                    llm_calls += 1
+                    llm_res = await choose_sku_key_from_candidates(
+                        title=title,
+                        second_hand_condition=raw.second_hand_condition,
+                        merchant_name=raw.merchant_name,
+                        candidates=candidates,
+                    )
+                    if llm_res:
+                        chosen_sku_key = llm_res.sku_key
+                        llm_payload = llm_res.raw
+                        llm_conf = llm_res.match_confidence
+                    raw.parsed_attrs_json = _mark_llm_attempt(
+                        raw.parsed_attrs_json,
+                        candidates_count=len(candidates),
+                        candidates_fingerprint=candidates_fingerprint,
+                        llm_payload=llm_payload,
+                        chosen_sku_key=chosen_sku_key,
+                        match_confidence=llm_conf,
+                    )
+
+            if chosen_sku_key:
+                sku = (
+                    await session.execute(select(GoldenSku).where(GoldenSku.sku_key == chosen_sku_key))
+                ).scalar_one_or_none()
+                if sku:
+                    # Continue by falling through to the normal flow with resolved SKU.
+                    # We treat this as a successful catalog match.
+                    sku_key = chosen_sku_key
+                else:
+                    sku = None
+
+            if sku is None:
+                stats.skipped_no_sku += 1
+                raw.match_reason_codes_json = json.dumps(["SKU_NOT_IN_CATALOG"], ensure_ascii=False)
+                if len(sample_reason_codes) < debug_sample_limit:
+                    sample_reason_codes.append("SKU_NOT_IN_CATALOG")
+                continue
 
         price_usd = await _convert_price_usd(price_local=raw.price_local, currency=raw.currency, fx_rates=fx_rates)
         if price_usd is None:

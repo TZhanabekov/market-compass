@@ -174,6 +174,7 @@ services/
 - [ ] Scheduled refresh jobs (worker)
 - [ ] ⚠️ Удалить seed-данные и заменить реальными из SerpAPI
 - [x] Admin endpoint: `POST /v1/admin/reconcile` (dry-run by default) + debug logs
+- [x] Admin endpoint: `GET /v1/admin/raw-offers/{id|raw_offer_id}` — explain parsing/matching (incl. LLM attempted state)
 
 ---
 

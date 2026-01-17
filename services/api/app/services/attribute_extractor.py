@@ -152,6 +152,8 @@ _COLOR_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bgold\b", re.IGNORECASE), "gold"),
     (re.compile(r"\blila\b", re.IGNORECASE), "purple"),
     # Japanese (colors / titanium)
+    (re.compile(r"ディープ\s*ブルー", re.IGNORECASE), "deep-blue"),
+    (re.compile(r"コズミック\s*オレンジ", re.IGNORECASE), "cosmic-orange"),
     (re.compile(r"スペース\s*ブラック", re.IGNORECASE), "space-black"),
     (re.compile(r"ブラック", re.IGNORECASE), "black"),
     (re.compile(r"ホワイト", re.IGNORECASE), "white"),

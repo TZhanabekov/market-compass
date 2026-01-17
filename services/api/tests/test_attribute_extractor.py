@@ -126,6 +126,8 @@ class TestExtractColor:
     def test_japanese_colors(self):
         assert extract_color("iPhone 16 ブラック 256GB") == "black"
         assert extract_color("iPhone 16 ホワイト") == "white"
+        assert extract_color("アップル Iphone 17 Pro ディープブルー") == "deep-blue"
+        assert extract_color("アップル Iphone 17 Pro コズミックオレンジ") == "cosmic-orange"
 
     def test_iphone_17_colors(self):
         """Test iPhone 17 Pro colors (2025)."""

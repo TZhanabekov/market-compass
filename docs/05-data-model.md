@@ -80,6 +80,9 @@ Columns (logical):
 - `currency` (char(3))
 - `thumbnail` (text, nullable)
 - `parsed_attrs_json` (json, nullable) — normalized attrs + confidence (may be stored as JSON-serialized text initially)
+- `parsed_attrs_json.llm_attempted` (bool, optional) — set to true after first LLM attempt (prevents re-calling LLM for the same raw row)
+- `parsed_attrs_json.llm_chosen_sku_key` (string, optional) — chosen sku_key from candidate list
+- `parsed_attrs_json.llm_match_confidence` (number, optional) — 0..1
 - `flags_json` (json, nullable) — e.g. is_accessory/is_contract/is_multi_variant/condition_conflict (may be stored as JSON-serialized text initially)
 - `matched_sku_id` (uuid/int, nullable) — FK to `golden_skus` when resolved
 - `match_confidence` (numeric, nullable) — 0..1
@@ -146,7 +149,7 @@ UI-facing guide steps.
 - `lock:hydrate:{offer_id}` (TTL: 30–120s)
 
 ### LLM parsing cache (optional)
-- `llm:parse:{hash(title + second_hand_condition + merchant + gl)}` -> strict JSON result (TTL: 30–180d)
+- `llm:parse:{hash(title + second_hand_condition + merchant + candidates_fingerprint)}` -> strict JSON result (TTL: 30–180d)
 - `lock:llm:parse:{same-hash}` (TTL: 30–120s)
 
 ### UI payload cache
