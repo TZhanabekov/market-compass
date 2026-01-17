@@ -11,5 +11,6 @@ from app.models.offer import Offer
 from app.models.sku import GoldenSku
 from app.models.merchant import Merchant
 from app.models.raw_offer import RawOffer
+from app.models.pattern_phrase import PatternPhrase
 
-__all__ = ["GoldenSku", "Merchant", "Offer", "RawOffer"]
+__all__ = ["GoldenSku", "Merchant", "Offer", "RawOffer", "PatternPhrase"]

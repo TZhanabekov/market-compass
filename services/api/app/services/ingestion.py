@@ -39,6 +39,7 @@ from app.services.dedup import compute_offer_dedup_key, compute_sku_key
 from app.services.fx import FxRates, convert_to_usd, get_latest_fx_rates
 from app.services.serpapi_client import ShoppingResult, get_serpapi_client
 from app.services.trust import MerchantTier, TrustFactors, calculate_trust_score_with_reasons, get_merchant_tier
+from app.services.patterns import PatternBundle, detect_condition_hint, detect_is_contract, load_pattern_bundle
 from app.stores.postgres import get_session
 
 logger = logging.getLogger("uvicorn.error")
@@ -162,6 +163,7 @@ async def ingest_raw_offers_for_query(*, query: str, country_code: str) -> RawIn
         return stats
 
     async with get_session() as session:
+        patterns = await load_pattern_bundle(session)
         for r in results:
             try:
                 if not is_iphone_product(r.title) or filter_non_iphone_products(r.title):
@@ -174,6 +176,7 @@ async def ingest_raw_offers_for_query(*, query: str, country_code: str) -> RawIn
                     country_code=stats.country_code,
                     source_request_key=source_request_key,
                     extraction=extraction,
+                    patterns=patterns,
                 )
                 stats.upserted_raw_offers += 1
             except Exception as e:
@@ -246,6 +249,7 @@ async def ingest_offers_for_sku(
 
     # 3. Process each result
     async with get_session() as session:
+        patterns = await load_pattern_bundle(session)
         # Find the target SKU
         sku = await _find_sku(session, sku_key)
         if not sku:
@@ -264,6 +268,7 @@ async def ingest_offers_for_sku(
                     config=config,
                     stats=stats,
                     source_request_key=source_request_key,
+                    patterns=patterns,
                 )
             except Exception as e:
                 logger.error(f"Error processing result {result.product_id}: {e}")
@@ -285,6 +290,7 @@ async def _process_shopping_result(
     config: IngestionConfig,
     stats: IngestionStats,
     source_request_key: str,
+    patterns: PatternBundle,
 ) -> bool:
     """Process a single shopping result.
 
@@ -311,6 +317,7 @@ async def _process_shopping_result(
         country_code=country_code,
         source_request_key=source_request_key,
         extraction=extraction,
+        patterns=patterns,
     )
 
     # Get condition from SerpAPI second_hand_condition field (more reliable than title parsing)
@@ -442,6 +449,7 @@ async def _upsert_raw_offer(
     country_code: str,
     source_request_key: str,
     extraction,
+    patterns: PatternBundle,
 ) -> None:
     """
     Store raw SerpAPI result in raw_offers (idempotent).
@@ -451,12 +459,23 @@ async def _upsert_raw_offer(
     """
     product_link_hash = _hash_product_link(result.product_link)
     is_multi_variant = _detect_is_multi_variant(result.title)
-    is_contract = _detect_is_contract(result.title)
+    is_contract = detect_is_contract(
+        title=result.title,
+        product_link=result.product_link,
+        patterns=patterns,
+    )
+    condition_hint, condition_hint_phrases = detect_condition_hint(
+        title=result.title,
+        product_link=result.product_link,
+        patterns=patterns,
+    )
 
     # Serialize minimal parsed artifacts; keep schema flexible.
     flags = {
         "is_multi_variant": is_multi_variant,
         "is_contract": is_contract,
+        "condition_hint": condition_hint,
+        "condition_hint_phrases": condition_hint_phrases,
     }
     parsed_attrs = {
         "extraction": {

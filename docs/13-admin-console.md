@@ -113,6 +113,23 @@ UX:
 - `llm` (attempted/chosen/confidence/would_call_now)
 - `debug` (snapshots)
 
+### 3.6 Patterns (Contract + Condition) + LLM Suggestions
+Цель: быстро расширять детекторы **без деплоя**:
+- contract/plan (подписка/рассрочка) → исключаем из promotion
+- condition hints (new/used/refurbished) → аналитика и fallback
+
+Backend:
+- CRUD:
+  - `GET /v1/admin/patterns`
+  - `POST /v1/admin/patterns`
+  - `DELETE /v1/admin/patterns/{pattern_id}` (soft-disable)
+- LLM recommendations:
+  - `POST /v1/admin/patterns/suggest` — читает последние ~2000 `raw_offers` (title + product_link), батчит и возвращает список фраз + match_count + примеры.
+
+UI:
+- Таблица текущих фраз (kind/phrase/enabled/source) + add/remove
+- Кнопка “Suggest via LLM” + просмотр рекомендаций + кнопки “Add” для выбранных фраз
+
 ### 3.5 Golden SKUs
 Вкладки:
 - List: таблица (sku_key, model, storage, color, display_name)

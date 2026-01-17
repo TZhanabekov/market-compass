@@ -25,8 +25,16 @@ from app.services.ingestion import (
 from app.services.attribute_extractor import ExtractionConfidence
 from app.services.debug_storage import list_debug_files, get_debug_file
 from app.services.fx import FxError, _fetch_openexchangerates_latest, _parse_openexchangerates_latest
+from app.services.pattern_suggest import suggest_patterns
+from app.services.patterns import (
+    KIND_CONDITION_NEW,
+    KIND_CONDITION_REFURBISHED,
+    KIND_CONDITION_USED,
+    KIND_CONTRACT,
+)
 from app.settings import get_settings
 from app.stores.postgres import get_session
+from app.models.pattern_phrase import PatternPhrase
 from sqlalchemy import select
 
 router = APIRouter()
@@ -485,4 +493,140 @@ async def debug_llm() -> dict:
         "openai_model_parse": s.openai_model_parse,
         "llm_max_calls_per_reconcile": s.llm_max_calls_per_reconcile,
         "llm_max_fraction_per_reconcile": s.llm_max_fraction_per_reconcile,
+    }
+
+
+# ============================================================
+# Admin-managed patterns (contract + condition) + LLM suggestions
+# ============================================================
+
+
+class PatternPhraseIn(BaseModel):
+    kind: str
+    phrase: str
+    enabled: bool = True
+    source: str | None = "manual"
+    notes: str | None = None
+
+
+class PatternPhraseOut(BaseModel):
+    id: int
+    kind: str
+    phrase: str
+    enabled: bool
+    source: str | None
+    notes: str | None
+
+
+@router.get("/patterns")
+async def list_patterns() -> dict:
+    async with get_session() as session:
+        res = await session.execute(
+            select(PatternPhrase).order_by(PatternPhrase.kind.asc(), PatternPhrase.phrase.asc())
+        )
+        rows = res.scalars().all()
+    return {
+        "ok": True,
+        "kinds": [KIND_CONTRACT, KIND_CONDITION_NEW, KIND_CONDITION_USED, KIND_CONDITION_REFURBISHED],
+        "patterns": [
+            PatternPhraseOut(
+                id=r.id,
+                kind=r.kind,
+                phrase=r.phrase,
+                enabled=bool(r.enabled),
+                source=r.source,
+                notes=r.notes,
+            ).model_dump()
+            for r in rows
+        ],
+    }
+
+
+@router.post("/patterns")
+async def upsert_pattern(p: PatternPhraseIn) -> dict:
+    kind = p.kind.strip()
+    phrase = p.phrase.strip().lower()
+    if kind not in {KIND_CONTRACT, KIND_CONDITION_NEW, KIND_CONDITION_USED, KIND_CONDITION_REFURBISHED}:
+        raise HTTPException(status_code=400, detail=f"Unsupported kind: {kind}")
+    if not phrase or len(phrase) < 2 or len(phrase) > 200:
+        raise HTTPException(status_code=400, detail="Invalid phrase length")
+
+    async with get_session() as session:
+        existing = (
+            await session.execute(
+                select(PatternPhrase).where(PatternPhrase.kind == kind, PatternPhrase.phrase == phrase)
+            )
+        ).scalar_one_or_none()
+        if existing:
+            existing.enabled = bool(p.enabled)
+            existing.source = p.source
+            existing.notes = p.notes
+            await session.flush()
+            row = existing
+        else:
+            row = PatternPhrase(
+                kind=kind,
+                phrase=phrase,
+                enabled=bool(p.enabled),
+                source=p.source,
+                notes=p.notes,
+            )
+            session.add(row)
+            await session.flush()
+        return {
+            "ok": True,
+            "pattern": PatternPhraseOut(
+                id=row.id,
+                kind=row.kind,
+                phrase=row.phrase,
+                enabled=bool(row.enabled),
+                source=row.source,
+                notes=row.notes,
+            ).model_dump(),
+        }
+
+
+@router.delete("/patterns/{pattern_id}")
+async def disable_pattern(pattern_id: int) -> dict:
+    async with get_session() as session:
+        row = (await session.execute(select(PatternPhrase).where(PatternPhrase.id == pattern_id))).scalar_one_or_none()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Pattern not found: {pattern_id}")
+        row.enabled = False
+        await session.flush()
+    return {"ok": True}
+
+
+class PatternSuggestRequest(BaseModel):
+    sample_limit: int = 2000
+    llm_batches: int = 3
+    items_per_batch: int = 120
+
+
+@router.post("/patterns/suggest")
+async def suggest_patterns_endpoint(req: PatternSuggestRequest) -> dict:
+    """Suggest new phrases for contract/condition detection based on recent raw_offers."""
+    async with get_session() as session:
+        try:
+            res = await suggest_patterns(
+                session=session,
+                sample_limit=req.sample_limit,
+                llm_batches=req.llm_batches,
+                items_per_batch=req.items_per_batch,
+            )
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "ok": True,
+        "cached": res.cached,
+        "llm_calls": res.llm_calls,
+        "sample_size": res.sample_size,
+        "suggestions": {
+            kind: [
+                {"phrase": x.phrase, "match_count": x.match_count, "examples": x.examples}
+                for x in items
+            ]
+            for kind, items in res.suggestions.items()
+        },
     }

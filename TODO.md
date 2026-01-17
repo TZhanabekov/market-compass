@@ -227,6 +227,9 @@ services/
   - [ ] Debug viewer:
     - [ ] list/view SerpAPI debug JSON files
   - [ ] Документация: `docs/13-admin-console.md`
+  - [ ] Patterns management:
+    - [ ] CRUD UI для `/v1/admin/patterns` (contract + condition phrases)
+    - [ ] LLM suggest UI для `/v1/admin/patterns/suggest` + “apply selected phrases”
 
 - [ ] Review queue для low-confidence matches
 - [ ] Sentry + Checkly + Vercel Analytics

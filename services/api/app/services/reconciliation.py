@@ -29,6 +29,7 @@ from app.services.attribute_extractor import extract_attributes
 from app.services.dedup import compute_offer_dedup_key, compute_sku_key
 from app.services.fx import FxRates, convert_to_usd, get_latest_fx_rates
 from app.services.llm_parser import choose_sku_key_from_candidates
+from app.services.patterns import PatternBundle, detect_condition_hint, detect_is_contract, load_pattern_bundle
 from app.services.trust import TrustFactors, calculate_trust_score_with_reasons, get_merchant_tier
 from app.settings import get_settings
 
@@ -314,6 +315,7 @@ async def reconcile_raw_offers(
 
     res = await session.execute(query)
     raws = res.scalars().all()
+    patterns: PatternBundle = await load_pattern_bundle(session)
 
     for raw in raws:
         stats.scanned += 1
@@ -327,7 +329,11 @@ async def reconcile_raw_offers(
             continue
 
         is_multi_variant = _detect_is_multi_variant(title)
-        is_contract = _detect_is_contract(title)
+        is_contract = detect_is_contract(
+            title=title,
+            product_link=raw.product_link,
+            patterns=patterns,
+        )
         if is_multi_variant:
             stats.skipped_multi_variant += 1
             raw.flags_json = json.dumps({"is_multi_variant": True, "is_contract": is_contract}, ensure_ascii=False)
@@ -356,7 +362,20 @@ async def reconcile_raw_offers(
             second_hand_condition=raw.second_hand_condition,
             normalized_condition=condition,
         )
-        raw.flags_json = json.dumps({"is_multi_variant": False, "is_contract": False}, ensure_ascii=False)
+        condition_hint, condition_hint_phrases = detect_condition_hint(
+            title=title,
+            product_link=raw.product_link,
+            patterns=patterns,
+        )
+        raw.flags_json = json.dumps(
+            {
+                "is_multi_variant": False,
+                "is_contract": False,
+                "condition_hint": condition_hint,
+                "condition_hint_phrases": condition_hint_phrases,
+            },
+            ensure_ascii=False,
+        )
 
         # Candidate-set matching: if deterministic extraction is incomplete,
         # optionally call LLM to choose an existing sku_key from candidates.
