@@ -543,9 +543,9 @@ Read a recent sample of `raw_offers` (title + product_link) and ask the LLM to p
 - `OPENAI_API_KEY` set
 
 **Request body**
-- `sample_limit` (int, default `2000`, max `5000`)
-- `llm_batches` (int, default `3`, max `10`)
-- `items_per_batch` (int, default `120`, max `250`)
+- `sample_limit` (int, default `2000`, max `2000`)
+- `llm_batches` (int, default `3`, max `4`)
+- `items_per_batch` (int, default `80`, max `80`)
 
 **Example**
 
@@ -555,7 +555,7 @@ curl -sS "$API_BASE_URL/v1/admin/patterns/suggest" \
   -d '{
     "sample_limit": 2000,
     "llm_batches": 3,
-    "items_per_batch": 120
+    "items_per_batch": 80
   }'
 ```
 

@@ -115,15 +115,16 @@ async def suggest_patterns(
     session: AsyncSession,
     sample_limit: int = 2000,
     llm_batches: int = 3,
-    items_per_batch: int = 120,
+    items_per_batch: int = 80,
 ) -> PatternSuggestResult:
     settings = get_settings()
     if not settings.llm_enabled or not settings.openai_api_key:
         raise RuntimeError("LLM is not enabled/configured")
 
-    sample_limit = max(50, min(int(sample_limit), 5000))
-    llm_batches = max(1, min(int(llm_batches), 10))
-    items_per_batch = max(20, min(int(items_per_batch), 250))
+    # Hard caps to prevent oversized prompts/timeouts in production.
+    sample_limit = max(50, min(int(sample_limit), 2000))
+    llm_batches = max(1, min(int(llm_batches), 4))
+    items_per_batch = max(20, min(int(items_per_batch), 80))
 
     # Sample last N raw_offers (recent)
     res = await session.execute(
@@ -197,8 +198,8 @@ async def suggest_patterns(
                     continue
                 payload_chunk.append(
                     {
-                        "title": t[:160],
-                        "link_hint": _url_hint(u),
+                        "title": t[:120],
+                        "link_hint": _url_hint(u)[:120],
                     }
                 )
             if payload_chunk:
@@ -291,10 +292,13 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> dict[str, Any]:
     headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
     body = {"model": settings.openai_model_parse, "input": prompt}
 
-    async with httpx.AsyncClient(timeout=45.0) as client:
-        r = await client.post(url, headers=headers, json=body)
-        r.raise_for_status()
-        data = r.json()
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            r = await client.post(url, headers=headers, json=body)
+            r.raise_for_status()
+            data = r.json()
+    except httpx.TimeoutException as e:
+        raise RuntimeError("LLM request timed out") from e
 
     text_out = ""
     if isinstance(data, dict):

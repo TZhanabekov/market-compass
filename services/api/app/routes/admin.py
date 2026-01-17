@@ -600,7 +600,7 @@ async def disable_pattern(pattern_id: int) -> dict:
 class PatternSuggestRequest(BaseModel):
     sample_limit: int = 2000
     llm_batches: int = 3
-    items_per_batch: int = 120
+    items_per_batch: int = 80
 
 
 @router.post("/patterns/suggest")
@@ -615,7 +615,10 @@ async def suggest_patterns_endpoint(req: PatternSuggestRequest) -> dict:
                 items_per_batch=req.items_per_batch,
             )
         except RuntimeError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            msg = str(e)
+            if "timed out" in msg.lower():
+                raise HTTPException(status_code=504, detail=msg)
+            raise HTTPException(status_code=400, detail=msg)
 
     return {
         "ok": True,
