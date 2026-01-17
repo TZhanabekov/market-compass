@@ -5,6 +5,7 @@ In production, consider adding authentication (API key or admin token).
 """
 
 import logging
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
@@ -24,6 +25,7 @@ from app.services.ingestion import (
 from app.services.attribute_extractor import ExtractionConfidence
 from app.services.debug_storage import list_debug_files, get_debug_file
 from app.services.fx import FxError, _fetch_openexchangerates_latest, _parse_openexchangerates_latest
+from app.settings import get_settings
 from app.stores.postgres import get_session
 from sqlalchemy import select
 
@@ -460,3 +462,27 @@ async def debug_fx() -> dict:
         }
     except FxError as e:
         return {"ok": False, "error": {"code": "FX_DEBUG_FAILED", "message": str(e), "detail": {}}}
+
+
+# ============================================================
+# Debug: LLM config (sanitized)
+# ============================================================
+
+
+@router.get("/debug/llm")
+async def debug_llm() -> dict:
+    """Debug LLM configuration (sanitized).
+
+    This endpoint never returns secrets; it only reports whether config is present/enabled.
+    """
+    s = get_settings()
+    base_host = urlparse(s.openai_base_url).hostname if s.openai_base_url else None
+    return {
+        "ok": True,
+        "llm_enabled": bool(s.llm_enabled),
+        "openai_key_set": bool(s.openai_api_key),
+        "openai_base_url_host": base_host,
+        "openai_model_parse": s.openai_model_parse,
+        "llm_max_calls_per_reconcile": s.llm_max_calls_per_reconcile,
+        "llm_max_fraction_per_reconcile": s.llm_max_fraction_per_reconcile,
+    }

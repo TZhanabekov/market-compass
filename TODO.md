@@ -133,8 +133,8 @@ services/
 - [x] API использует данные из PostgreSQL
 
 #### 1.4 Курсы валют
-- [ ] Интеграция с openexchangerates API (FX service)
-- [ ] Кеширование в Redis (TTL ~1 час)
+- [x] Интеграция с openexchangerates API (FX service)
+- [x] Кеширование в Redis (TTL ~1 час)
 - [x] Добавлен FX сервис + Redis cache helpers (готово к подключению в ingestion/пересчёт price_usd)
 - [x] Debug endpoint: `/v1/admin/debug/fx` для диагностики отсутствующих курсов (например EUR)
 
@@ -150,7 +150,7 @@ services/
   - [x] `app/services/llm_parser.py`: deterministic-first, LLM as fallback; strict JSON validation
   - [x] Redis cache + lock для LLM: `llm:parse:{hash(...)}` + lock TTL 60s, cache TTL 180d
   - [x] Candidate-set matching: LLM выбирает SKU только из списка кандидатов из БД, возвращает `match_confidence` (0..1)
-  - [ ] Включение в проде через env (`LLM_ENABLED=true` + `OPENAI_API_KEY`) и мониторинг бюджета (calls/run)
+  - [x] Включение в проде через env (`LLM_ENABLED=true` + `OPENAI_API_KEY`) и мониторинг бюджета (calls/run)
   - [x] Persist минимальные артефакты: `match_confidence` + `match_reason_codes_json` / `trust_reason_codes_json` (offers)
   - [x] Budget policy (reconcile): cap LLM calls per run + expose metrics in `/v1/admin/reconcile` stats/logs
 - [ ] Raw ingestion buffer (вариант A): сохранить все оплаченные результаты, даже если SKU ещё не существует

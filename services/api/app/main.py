@@ -27,6 +27,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     # Startup
     settings = get_settings()
+    logger.info(
+        "Config: llm_enabled=%s openai_key_set=%s openai_model_parse=%s llm_max_calls_per_reconcile=%s llm_max_fraction_per_reconcile=%s openexchangerates_key_set=%s",
+        settings.llm_enabled,
+        bool(settings.openai_api_key),
+        settings.openai_model_parse,
+        settings.llm_max_calls_per_reconcile,
+        settings.llm_max_fraction_per_reconcile,
+        bool(settings.openexchangerates_key),
+    )
 
     # Initialize database (skip in tests if no DB available)
     try:
