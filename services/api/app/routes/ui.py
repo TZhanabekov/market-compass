@@ -95,6 +95,7 @@ def _get_country_name(code: str) -> str:
         "HK": "Hong Kong",
         "AE": "United Arab Emirates",
         "FR": "France",
+        "CA": "Canada",
     }
     return countries.get(code, code)
 
@@ -109,5 +110,6 @@ def _get_currency(code: str) -> str:
         "HK": "HKD",
         "AE": "AED",
         "FR": "EUR",
+        "CA": "CAD",
     }
     return currencies.get(code, "USD")

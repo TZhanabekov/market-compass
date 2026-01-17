@@ -147,9 +147,10 @@ services/
 - [x] Fix: корректный выбор валюты для `extracted_price` (не использовать `alternative_price.currency`, если primary price в другой валюте)
 - [x] Regex extraction для атрибутов iPhone (model/storage/color/condition)
 - [ ] GPT-5-mini fallback для сложных случаев (low/medium confidence) **без ломки текущей архитектуры**
-  - [ ] `app/services/llm_parser.py`: deterministic-first, LLM as fallback; strict JSON schema + validation
-  - [ ] Redis cache + lock для LLM: `llm:parse:{hash(...)}` + `lock:llm:parse:{...}` (TTL 30–180d / 30–120s)
-  - [ ] Candidate-set matching: LLM выбирает SKU только из списка кандидатов из БД, возвращает `match_confidence` (0..1) + reason codes
+  - [x] `app/services/llm_parser.py`: deterministic-first, LLM as fallback; strict JSON validation
+  - [x] Redis cache + lock для LLM: `llm:parse:{hash(...)}` + lock TTL 60s, cache TTL 180d
+  - [x] Candidate-set matching: LLM выбирает SKU только из списка кандидатов из БД, возвращает `match_confidence` (0..1)
+  - [ ] Включение в проде через env (`LLM_ENABLED=true` + `OPENAI_API_KEY`) и мониторинг бюджета (calls/run)
   - [ ] Persist минимальные артефакты: `match_confidence` + (опц.) `match_reason_codes` / `trust_reason_codes`
   - [ ] Budget policy: cap LLM calls per ingestion run (например <= 10–20% результатов)
 - [ ] Raw ingestion buffer (вариант A): сохранить все оплаченные результаты, даже если SKU ещё не существует
@@ -164,13 +165,15 @@ services/
     (без повторных SerpAPI запросов)
     - Реализация: `services/api/scripts/reconcile_raw_offers.py`
   - [ ] Словари для мультиязычности (минимальный набор): colors + accessory + contract + condition tokens (JP/DE/FR как старт)
+    - [x] Базовые токены/паттерны для DE/FR/JP (colors/accessory/condition + contract flags)
+    - [ ] Расширить словари под HK/AE/SG/KR/AU/CA по мере появления реальных тайтлов
 - [x] Trust Score (0-100) — базовый алгоритм
 - [x] Ranking по effective price
 - [x] Ingestion service: SerpAPI → extraction → FX → dedup → DB
 - [x] Admin endpoint: `POST /v1/admin/ingest` для ручного тестирования
 - [ ] Scheduled refresh jobs (worker)
 - [ ] ⚠️ Удалить seed-данные и заменить реальными из SerpAPI
-- [ ] Admin endpoint: `POST /v1/admin/reconcile` (dry-run by default) + debug logs
+- [x] Admin endpoint: `POST /v1/admin/reconcile` (dry-run by default) + debug logs
 
 ---
 

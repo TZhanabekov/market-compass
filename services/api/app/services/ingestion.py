@@ -60,6 +60,7 @@ COUNTRY_GL_MAP = {
     "SG": "sg",
     "KR": "kr",
     "AU": "au",
+    "CA": "ca",
 }
 
 # Country code -> currency
@@ -74,6 +75,7 @@ COUNTRY_CURRENCY_MAP = {
     "SG": "SGD",
     "KR": "KRW",
     "AU": "AUD",
+    "CA": "CAD",
 }
 
 # Country code -> full name
@@ -88,6 +90,7 @@ COUNTRY_NAME_MAP = {
     "SG": "Singapore",
     "KR": "South Korea",
     "AU": "Australia",
+    "CA": "Canada",
 }
 
 
@@ -333,6 +336,19 @@ def _detect_is_contract(title: str) -> bool:
             "monthly payments",
             "installment payments",
             "mobile phone plan",
+            # German
+            "vertrag",
+            "ratenzahlung",
+            "monatlich",
+            # French
+            "forfait",
+            "abonnement",
+            "mensualit",
+            # Japanese
+            "契約",
+            "分割",
+            "月額",
+            "プラン",
         ]
     )
 

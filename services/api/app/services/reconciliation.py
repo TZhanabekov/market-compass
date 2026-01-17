@@ -27,7 +27,9 @@ from app.models import GoldenSku, Merchant, Offer, RawOffer
 from app.services.attribute_extractor import extract_attributes
 from app.services.dedup import compute_offer_dedup_key, compute_sku_key
 from app.services.fx import FxRates, convert_to_usd, get_latest_fx_rates
+from app.services.llm_parser import choose_sku_key_from_candidates
 from app.services.trust import TrustFactors, calculate_trust_score, get_merchant_tier
+from app.settings import get_settings
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -64,6 +66,7 @@ COUNTRY_NAME_MAP = {
     "SG": "Singapore",
     "KR": "South Korea",
     "AU": "Australia",
+    "CA": "Canada",
 }
 
 
@@ -121,6 +124,19 @@ def _detect_is_contract(title: str) -> bool:
             "monthly payments",
             "installment payments",
             "mobile phone plan",
+            # German
+            "vertrag",
+            "ratenzahlung",
+            "monatlich",
+            # French
+            "forfait",
+            "abonnement",
+            "mensualit",
+            # Japanese
+            "契約",
+            "分割",
+            "月額",
+            "プラン",
         ]
     )
 
@@ -177,6 +193,12 @@ async def reconcile_raw_offers(
     created_offer_ids: list[str] = []
     matched_raw_offer_ids: list[str] = []
     sample_reason_codes: list[str] = []
+    settings = get_settings()
+    llm_calls = 0
+    llm_calls_budget = min(
+        int(limit * settings.llm_max_fraction_per_reconcile),
+        int(settings.llm_max_calls_per_reconcile),
+    )
 
     # FX is optional; if it fails, we still promote USD offers.
     fx_rates: FxRates | None = None
@@ -245,11 +267,159 @@ async def reconcile_raw_offers(
         )
         raw.flags_json = json.dumps({"is_multi_variant": False, "is_contract": False}, ensure_ascii=False)
 
+        # Candidate-set matching: if deterministic extraction is incomplete,
+        # optionally call LLM to choose an existing sku_key from candidates.
         if not model or not storage or not color:
-            stats.skipped_missing_attrs += 1
-            raw.match_reason_codes_json = json.dumps(["MISSING_REQUIRED_ATTRS"], ensure_ascii=False)
+            chosen_sku_key: str | None = None
+            llm_payload: dict[str, Any] | None = None
+            llm_conf: float | None = None
+
+            if (
+                settings.llm_enabled
+                and settings.openai_api_key
+                and model
+                and llm_calls_budget > 0
+                and llm_calls < llm_calls_budget
+            ):
+                cand_res = await session.execute(
+                    select(GoldenSku.sku_key)
+                    .where(GoldenSku.model == model)
+                    .where(GoldenSku.condition == condition)
+                    .limit(50)
+                )
+                candidates = [str(x) for x in cand_res.scalars().all()]
+                llm_calls += 1
+                llm_res = await choose_sku_key_from_candidates(
+                    title=title,
+                    second_hand_condition=raw.second_hand_condition,
+                    merchant_name=raw.merchant_name,
+                    candidates=candidates,
+                )
+                if llm_res:
+                    chosen_sku_key = llm_res.sku_key
+                    llm_payload = llm_res.raw
+                    llm_conf = llm_res.match_confidence
+
+            if not chosen_sku_key:
+                stats.skipped_missing_attrs += 1
+                raw.match_reason_codes_json = json.dumps(["MISSING_REQUIRED_ATTRS"], ensure_ascii=False)
+                if len(sample_reason_codes) < debug_sample_limit:
+                    sample_reason_codes.append("MISSING_REQUIRED_ATTRS")
+                continue
+
+            # Store LLM evidence into parsed snapshot for later auditing
+            try:
+                existing_snapshot = json.loads(raw.parsed_attrs_json or "{}")
+                if isinstance(existing_snapshot, dict):
+                    existing_snapshot["llm"] = llm_payload
+                    raw.parsed_attrs_json = json.dumps(existing_snapshot, ensure_ascii=False)
+            except Exception:
+                pass
+
+            sku = (await session.execute(select(GoldenSku).where(GoldenSku.sku_key == chosen_sku_key))).scalar_one_or_none()
+            if not sku:
+                stats.skipped_no_sku += 1
+                raw.match_reason_codes_json = json.dumps(["SKU_NOT_IN_CATALOG"], ensure_ascii=False)
+                if len(sample_reason_codes) < debug_sample_limit:
+                    sample_reason_codes.append("SKU_NOT_IN_CATALOG")
+                continue
+
+            # Continue flow with resolved sku
+            price_usd = await _convert_price_usd(price_local=raw.price_local, currency=raw.currency, fx_rates=fx_rates)
+            if price_usd is None:
+                stats.skipped_fx += 1
+                raw.match_reason_codes_json = json.dumps(["FX_UNAVAILABLE"], ensure_ascii=False)
+                if len(sample_reason_codes) < debug_sample_limit:
+                    sample_reason_codes.append("FX_UNAVAILABLE")
+                continue
+
+            merchant = await _find_or_create_merchant(session, raw.merchant_name)
+            dedup_key = compute_offer_dedup_key(
+                merchant=raw.merchant_name,
+                price=raw.price_local,
+                currency=raw.currency,
+                url=raw.product_link,
+            )
+            existing_offer = (
+                await session.execute(select(Offer).where(Offer.dedup_key == dedup_key))
+            ).scalar_one_or_none()
+            if existing_offer:
+                if existing_offer.sku_id == sku.id:
+                    stats.matched_existing_offer += 1
+                    raw.matched_sku_id = sku.id
+                    raw.match_confidence = float(llm_conf or 0.0)
+                    raw.match_reason_codes_json = json.dumps(["LLM_MATCH_EXISTING_OFFER"], ensure_ascii=False)
+                    stats.updated_raw_matches += 1
+                    if len(matched_raw_offer_ids) < debug_sample_limit:
+                        matched_raw_offer_ids.append(raw.raw_offer_id)
+                    if len(sample_reason_codes) < debug_sample_limit:
+                        sample_reason_codes.append("LLM_MATCH_EXISTING_OFFER")
+                else:
+                    stats.dedup_conflict += 1
+                    raw.match_reason_codes_json = json.dumps(["DEDUP_KEY_CONFLICT"], ensure_ascii=False)
+                    if len(sample_reason_codes) < debug_sample_limit:
+                        sample_reason_codes.append("DEDUP_KEY_CONFLICT")
+                continue
+
+            trust_score = calculate_trust_score(
+                TrustFactors(
+                    merchant_tier=merchant.tier,
+                    has_shipping_info=False,
+                    has_warranty_info=False,
+                    has_return_policy=False,
+                    price_within_expected_range=True,
+                )
+            )
+
+            offer = Offer(
+                offer_id=str(uuid4()),
+                sku_id=sku.id,
+                merchant_id=merchant.id,
+                dedup_key=dedup_key,
+                country_code=raw.country_code.upper(),
+                country=COUNTRY_NAME_MAP.get(raw.country_code.upper(), raw.country_code.upper()),
+                city=None,
+                price=raw.price_local,
+                currency=raw.currency.upper(),
+                price_usd=price_usd,
+                tax_refund_value=0,
+                shipping_cost=0,
+                import_duty=0,
+                final_effective_price=price_usd,
+                local_price_formatted=_format_local_price(raw.price_local, raw.currency.upper()),
+                shop_name=raw.merchant_name,
+                trust_score=trust_score,
+                availability="In Stock",
+                condition=condition,
+                sim_type=None,
+                warranty=None,
+                restriction_alert=None,
+                product_link=raw.product_link,
+                merchant_url=None,
+                immersive_token=raw.immersive_token,
+                guide_steps_json=None,
+                unknown_shipping=True,
+                unknown_refund=True,
+                source="serpapi_reconcile_llm",
+                source_product_id=raw.source_product_id,
+                fetched_at=datetime.now(timezone.utc),
+            )
+            session.add(offer)
+            await session.flush()
+
+            raw.matched_sku_id = sku.id
+            raw.match_confidence = float(llm_conf or 0.0)
+            raw.match_reason_codes_json = json.dumps(["LLM_MATCH"], ensure_ascii=False)
+
+            stats.created_offers += 1
+            stats.updated_raw_matches += 1
+
+            if len(created_offer_ids) < debug_sample_limit:
+                created_offer_ids.append(offer.offer_id)
+            if len(matched_raw_offer_ids) < debug_sample_limit:
+                matched_raw_offer_ids.append(raw.raw_offer_id)
             if len(sample_reason_codes) < debug_sample_limit:
-                sample_reason_codes.append("MISSING_REQUIRED_ATTRS")
+                sample_reason_codes.append("LLM_MATCH")
             continue
 
         sku_key = compute_sku_key({"model": model, "storage": storage, "color": color, "condition": condition})

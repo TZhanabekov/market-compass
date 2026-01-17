@@ -115,6 +115,37 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("OPENEXCHANGERATES_KEY", "OPENEXCHANGERATES_APP_ID"),
     )
 
+    # LLM (optional parsing/matching fallback)
+    llm_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("LLM_ENABLED"),
+        description="Enable GPT-5-mini fallback parsing/matching (off by default).",
+    )
+    openai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENAI_API_KEY"),
+    )
+    openai_base_url: str = Field(
+        default="https://api.openai.com/v1",
+        validation_alias=AliasChoices("OPENAI_BASE_URL"),
+    )
+    openai_model_parse: str = Field(
+        default="gpt-5-mini",
+        validation_alias=AliasChoices("OPENAI_MODEL_PARSE"),
+    )
+    llm_max_calls_per_reconcile: int = Field(
+        default=50,
+        validation_alias=AliasChoices("LLM_MAX_CALLS_PER_RECONCILE"),
+        ge=0,
+        le=5000,
+    )
+    llm_max_fraction_per_reconcile: float = Field(
+        default=0.2,
+        validation_alias=AliasChoices("LLM_MAX_FRACTION_PER_RECONCILE"),
+        ge=0.0,
+        le=1.0,
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

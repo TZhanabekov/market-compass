@@ -117,6 +117,16 @@ class TestExtractColor:
         assert extract_color("iPhone 16 Noir") == "black"
         assert extract_color("iPhone 16 Blanc") == "white"
 
+    def test_german_colors(self):
+        assert extract_color("iPhone 16 Schwarz") == "black"
+        assert extract_color("iPhone 16 Weiß") == "white"
+        assert extract_color("iPhone 16 Weiss") == "white"
+        assert extract_color("iPhone 16 Blau") == "blue"
+
+    def test_japanese_colors(self):
+        assert extract_color("iPhone 16 ブラック 256GB") == "black"
+        assert extract_color("iPhone 16 ホワイト") == "white"
+
     def test_iphone_17_colors(self):
         """Test iPhone 17 Pro colors (2025)."""
         assert extract_color("iPhone 17 Pro Deep Blue") == "deep-blue"
@@ -158,6 +168,22 @@ class TestExtractCondition:
         assert extract_condition("iPhone 16 Pro Used") == "used"
         assert extract_condition("iPhone 16 Pro Pre-Owned") == "used"
         assert extract_condition("iPhone 16 Pro Second Hand") == "used"
+
+    def test_german_conditions(self):
+        assert extract_condition("iPhone 16 Pro Neu") == "new"
+        assert extract_condition("iPhone 16 Pro Gebraucht") == "used"
+        assert extract_condition("iPhone 16 Pro Generalüberholt") == "refurbished"
+
+    def test_french_conditions(self):
+        assert extract_condition("iPhone 16 Pro Neuf") == "new"
+        assert extract_condition("iPhone 16 Pro d'occasion") == "used"
+        assert extract_condition("iPhone 16 Pro Reconditionné") == "refurbished"
+
+    def test_japanese_conditions(self):
+        assert extract_condition("iPhone 16 Pro 新品") == "new"
+        assert extract_condition("iPhone 16 Pro 未使用") == "new"
+        assert extract_condition("iPhone 16 Pro 中古") == "used"
+        assert extract_condition("iPhone 16 Pro 整備済み") == "refurbished"
 
     def test_default_to_new(self):
         # If no condition specified, default to "new"
@@ -205,6 +231,7 @@ class TestIsIphoneProduct:
         assert is_iphone_product("Apple iPhone 16 Pro") is True
         assert is_iphone_product("IPHONE 16") is True
         assert is_iphone_product("New iPhone 15 Pro Max") is True
+        assert is_iphone_product("Apple アイフォン 16 Pro") is True
 
     def test_not_iphone(self):
         assert is_iphone_product("Samsung Galaxy S24") is False
@@ -226,6 +253,11 @@ class TestFilterNonIphoneProducts:
         assert filter_non_iphone_products("iPhone Charger Cable") is True
         assert filter_non_iphone_products("MagSafe Battery Pack") is True
         assert filter_non_iphone_products("AirPods Pro 2") is True
+
+    def test_filters_accessories_multilingual(self):
+        assert filter_non_iphone_products("iPhone 16 Hülle") is True
+        assert filter_non_iphone_products("iPhone 16 Coque") is True
+        assert filter_non_iphone_products("iPhone 16 ケース") is True
 
     def test_allows_actual_iphones(self):
         assert filter_non_iphone_products("Apple iPhone 16 Pro Max 256GB") is False

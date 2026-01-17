@@ -140,6 +140,31 @@ _COLOR_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(orange)\b", re.IGNORECASE), "orange"),
     (re.compile(r"\bnatural\b", re.IGNORECASE), "natural"),
     (re.compile(r"\bdesert\b", re.IGNORECASE), "desert"),
+    # German
+    (re.compile(r"\bschwarz\b", re.IGNORECASE), "black"),
+    (re.compile(r"\bwei(?:ß|ss)\b", re.IGNORECASE), "white"),
+    (re.compile(r"\bblau\b", re.IGNORECASE), "blue"),
+    (re.compile(r"\brosa\b", re.IGNORECASE), "pink"),
+    (re.compile(r"\bgrün\b", re.IGNORECASE), "green"),
+    (re.compile(r"\bgelb\b", re.IGNORECASE), "yellow"),
+    (re.compile(r"\brot\b", re.IGNORECASE), "red"),
+    (re.compile(r"\bsilber\b", re.IGNORECASE), "silver"),
+    (re.compile(r"\bgold\b", re.IGNORECASE), "gold"),
+    (re.compile(r"\blila\b", re.IGNORECASE), "purple"),
+    # Japanese (colors / titanium)
+    (re.compile(r"スペース\s*ブラック", re.IGNORECASE), "space-black"),
+    (re.compile(r"ブラック", re.IGNORECASE), "black"),
+    (re.compile(r"ホワイト", re.IGNORECASE), "white"),
+    (re.compile(r"ブルー", re.IGNORECASE), "blue"),
+    (re.compile(r"ピンク", re.IGNORECASE), "pink"),
+    (re.compile(r"グリーン", re.IGNORECASE), "green"),
+    (re.compile(r"イエロー", re.IGNORECASE), "yellow"),
+    (re.compile(r"レッド", re.IGNORECASE), "red"),
+    (re.compile(r"パープル", re.IGNORECASE), "purple"),
+    (re.compile(r"シルバー", re.IGNORECASE), "silver"),
+    (re.compile(r"ゴールド", re.IGNORECASE), "gold"),
+    (re.compile(r"ナチュラル\s*チタニウム|ナチュラルチタニウム", re.IGNORECASE), "natural"),
+    (re.compile(r"デザート\s*チタニウム|デザートチタニウム", re.IGNORECASE), "desert"),
     # Product RED
     (re.compile(r"\(product\)\s*red", re.IGNORECASE), "red"),
     (re.compile(r"product\s*red", re.IGNORECASE), "red"),
@@ -154,6 +179,18 @@ _CONDITION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(refurbished|refurb|renewed|certified\s*pre-?owned)\b", re.IGNORECASE), "refurbished"),
     (re.compile(r"\b(used|pre-?owned|second\s*hand)\b", re.IGNORECASE), "used"),
     (re.compile(r"\b(new|brand\s*new|sealed|bnib)\b", re.IGNORECASE), "new"),
+    # German
+    (re.compile(r"\b(generalüberholt|generalueberholt)\b", re.IGNORECASE), "refurbished"),
+    (re.compile(r"\bgebraucht\b", re.IGNORECASE), "used"),
+    (re.compile(r"\bneu\b", re.IGNORECASE), "new"),
+    # French
+    (re.compile(r"\breconditionn(?:é|e)\b", re.IGNORECASE), "refurbished"),
+    (re.compile(r"\bd'?occasion\b", re.IGNORECASE), "used"),
+    (re.compile(r"\bneuf\b", re.IGNORECASE), "new"),
+    # Japanese
+    (re.compile(r"整備済み|再生品|リファービッシュ", re.IGNORECASE), "refurbished"),
+    (re.compile(r"中古", re.IGNORECASE), "used"),
+    (re.compile(r"新品|未使用", re.IGNORECASE), "new"),
 ]
 
 
@@ -306,7 +343,8 @@ def is_iphone_product(title: str) -> bool:
     Returns:
         True if title contains iPhone reference.
     """
-    return bool(re.search(r"\biphone\b", title, re.IGNORECASE))
+    # Include a few common non-Latin spellings seen in local marketplaces.
+    return bool(re.search(r"(?:\biphone\b|アイフォン|アイフォーン)", title, re.IGNORECASE))
 
 
 def filter_non_iphone_products(title: str) -> bool:
@@ -319,6 +357,7 @@ def filter_non_iphone_products(title: str) -> bool:
         True if this is likely NOT an iPhone (case, screen protector, etc.).
     """
     exclusion_patterns = [
+        # English
         r"\bcase\b",
         r"\bcover\b",
         r"\bprotector\b",
@@ -341,6 +380,33 @@ def filter_non_iphone_products(title: str) -> bool:
         r"\bwatch\b",
         r"\bipad\b",
         r"\bmac\b",
+        # German
+        r"\bh(ü|ue)lle\b",  # Hülle
+        r"\bschutzfolie\b",
+        r"\bdisplay(?:schutz|schutzfolie)?\b",
+        r"\blade(?:gerät|kabel)\b",
+        r"\bkopfhörer\b",
+        # French
+        r"\bcoque\b",
+        r"\bétui\b",
+        r"\bverre\s+trempé\b",
+        r"\bfilm\s+de\s+protection\b",
+        r"\bchargeur\b",
+        r"\bcâble\b",
+        r"\badaptateur\b",
+        r"\bécouteurs\b",
+        r"\bcasque\b",
+        # Japanese (very common accessories)
+        r"ケース",
+        r"カバー",
+        r"保護",
+        r"保護フィルム",
+        r"フィルム",
+        r"ガラス",
+        r"強化ガラス",
+        r"充電器",
+        r"ケーブル",
+        r"アダプター",
     ]
 
     for pattern in exclusion_patterns:
