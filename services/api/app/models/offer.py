@@ -60,7 +60,12 @@ class Offer(Base):
 
     # Trust & availability
     trust_score: Mapped[int] = mapped_column(index=True)  # 0-100
+    trust_reason_codes_json: Mapped[str | None] = mapped_column(Text)
     availability: Mapped[str] = mapped_column(String(50))  # In Stock, Limited, Out of Stock
+
+    # Matching explainability (optional)
+    match_confidence: Mapped[float | None] = mapped_column()
+    match_reason_codes_json: Mapped[str | None] = mapped_column(Text)
 
     # Product info
     condition: Mapped[str] = mapped_column(String(20), default="new")  # new/refurbished/used

@@ -151,7 +151,7 @@ services/
   - [x] Redis cache + lock для LLM: `llm:parse:{hash(...)}` + lock TTL 60s, cache TTL 180d
   - [x] Candidate-set matching: LLM выбирает SKU только из списка кандидатов из БД, возвращает `match_confidence` (0..1)
   - [ ] Включение в проде через env (`LLM_ENABLED=true` + `OPENAI_API_KEY`) и мониторинг бюджета (calls/run)
-  - [ ] Persist минимальные артефакты: `match_confidence` + (опц.) `match_reason_codes` / `trust_reason_codes`
+  - [x] Persist минимальные артефакты: `match_confidence` + `match_reason_codes_json` / `trust_reason_codes_json` (offers)
   - [x] Budget policy (reconcile): cap LLM calls per run + expose metrics in `/v1/admin/reconcile` stats/logs
 - [ ] Raw ingestion buffer (вариант A): сохранить все оплаченные результаты, даже если SKU ещё не существует
   - [x] Добавить таблицу `raw_offers` (Alembic migration) без обязательного `sku_id`

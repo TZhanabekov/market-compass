@@ -51,7 +51,9 @@ Normalized offers attached to a Golden SKU.
 - `tax_refund_est_usd` (numeric, nullable)
 - `availability` (text, nullable)
 - `trust_score` (int) — 0..100
+- `trust_reason_codes_json` (json, nullable) — compact reason codes (persisted as JSON-serialized text initially)
 - `match_confidence` (numeric) — 0..1
+- `match_reason_codes_json` (json, nullable) — compact match reason codes (persisted as JSON-serialized text initially)
 - `first_seen_at`, `last_seen_at`
 
 ### 3.1) raw_offers (recommended)

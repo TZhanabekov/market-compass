@@ -29,7 +29,7 @@ from app.services.attribute_extractor import extract_attributes
 from app.services.dedup import compute_offer_dedup_key, compute_sku_key
 from app.services.fx import FxRates, convert_to_usd, get_latest_fx_rates
 from app.services.llm_parser import choose_sku_key_from_candidates
-from app.services.trust import TrustFactors, calculate_trust_score, get_merchant_tier
+from app.services.trust import TrustFactors, calculate_trust_score_with_reasons, get_merchant_tier
 from app.settings import get_settings
 
 logger = logging.getLogger("uvicorn.error")
@@ -469,7 +469,7 @@ async def reconcile_raw_offers(
                         sample_reason_codes.append("DEDUP_KEY_CONFLICT")
                 continue
 
-            trust_score = calculate_trust_score(
+            trust_score, trust_reason_codes = calculate_trust_score_with_reasons(
                 TrustFactors(
                     merchant_tier=merchant.tier,
                     has_shipping_info=False,
@@ -497,6 +497,7 @@ async def reconcile_raw_offers(
                 local_price_formatted=_format_local_price(raw.price_local, raw.currency.upper()),
                 shop_name=raw.merchant_name,
                 trust_score=trust_score,
+                trust_reason_codes_json=json.dumps(trust_reason_codes, ensure_ascii=False),
                 availability="In Stock",
                 condition=condition,
                 sim_type=None,
@@ -511,6 +512,8 @@ async def reconcile_raw_offers(
                 source="serpapi_reconcile_llm",
                 source_product_id=raw.source_product_id,
                 fetched_at=datetime.now(timezone.utc),
+                match_confidence=float(llm_conf or 0.0),
+                match_reason_codes_json=json.dumps(["LLM_MATCH"], ensure_ascii=False),
             )
             session.add(offer)
             await session.flush()
@@ -648,7 +651,7 @@ async def reconcile_raw_offers(
                     sample_reason_codes.append("DEDUP_KEY_CONFLICT")
             continue
 
-        trust_score = calculate_trust_score(
+        trust_score, trust_reason_codes = calculate_trust_score_with_reasons(
             TrustFactors(
                 merchant_tier=merchant.tier,
                 has_shipping_info=False,
@@ -676,6 +679,7 @@ async def reconcile_raw_offers(
             local_price_formatted=_format_local_price(raw.price_local, raw.currency.upper()),
             shop_name=raw.merchant_name,
             trust_score=trust_score,
+            trust_reason_codes_json=json.dumps(trust_reason_codes, ensure_ascii=False),
             availability="In Stock",
             condition=condition,
             sim_type=None,
@@ -690,6 +694,8 @@ async def reconcile_raw_offers(
             source="serpapi_reconcile",
             source_product_id=raw.source_product_id,
             fetched_at=datetime.now(timezone.utc),
+            match_confidence=1.0,
+            match_reason_codes_json=json.dumps(["DETERMINISTIC_SKU_MATCH"], ensure_ascii=False),
         )
         session.add(offer)
         await session.flush()

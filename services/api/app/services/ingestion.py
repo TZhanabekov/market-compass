@@ -38,7 +38,7 @@ from app.services.attribute_extractor import (
 from app.services.dedup import compute_offer_dedup_key, compute_sku_key
 from app.services.fx import FxRates, convert_to_usd, get_latest_fx_rates
 from app.services.serpapi_client import ShoppingResult, get_serpapi_client
-from app.services.trust import MerchantTier, TrustFactors, calculate_trust_score, get_merchant_tier
+from app.services.trust import MerchantTier, TrustFactors, calculate_trust_score_with_reasons, get_merchant_tier
 from app.stores.postgres import get_session
 
 logger = logging.getLogger("uvicorn.error")
@@ -572,7 +572,7 @@ async def _create_offer(
         has_return_policy=False,
         price_within_expected_range=True,  # TODO: implement anomaly detection
     )
-    trust_score = calculate_trust_score(trust_factors)
+    trust_score, trust_reason_codes = calculate_trust_score_with_reasons(trust_factors)
 
     # Format local price
     local_price_formatted = _format_local_price(result.price, result.currency)
@@ -598,6 +598,7 @@ async def _create_offer(
         local_price_formatted=local_price_formatted,
         shop_name=result.merchant,
         trust_score=trust_score,
+        trust_reason_codes_json=json.dumps(trust_reason_codes, ensure_ascii=False),
         availability="In Stock",  # Assume in stock from google_shopping
         condition=condition,  # new/refurbished/used
         sim_type=None,
@@ -609,6 +610,8 @@ async def _create_offer(
         guide_steps_json=None,
         unknown_shipping=True,
         unknown_refund=True,
+        match_confidence=1.0,
+        match_reason_codes_json=json.dumps(["INGESTION_TARGET_SKU_MATCH"], ensure_ascii=False),
         source="serpapi",
         source_product_id=result.product_id,
         fetched_at=datetime.now(timezone.utc),

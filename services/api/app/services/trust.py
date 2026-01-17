@@ -52,6 +52,40 @@ _ADJUSTMENTS = {
 }
 
 
+def calculate_trust_score_with_reasons(factors: TrustFactors) -> tuple[int, list[str]]:
+    """Calculate trust score and return compact reason codes.
+
+    Reason codes are stable strings intended for persistence / explainability.
+    """
+    score = _TIER_BASE_SCORES[factors.merchant_tier]
+    reasons: list[str] = [f"TIER_{factors.merchant_tier.name}"]
+
+    if not factors.has_shipping_info:
+        score += _ADJUSTMENTS["missing_shipping"]
+        reasons.append("MISSING_SHIPPING")
+    if not factors.has_warranty_info:
+        score += _ADJUSTMENTS["missing_warranty"]
+        reasons.append("MISSING_WARRANTY")
+    if not factors.has_return_policy:
+        score += _ADJUSTMENTS["missing_return_policy"]
+        reasons.append("MISSING_RETURN_POLICY")
+    if not factors.price_within_expected_range:
+        score += _ADJUSTMENTS["price_anomaly"]
+        reasons.append("PRICE_ANOMALY")
+    if factors.verified_stock:
+        score += _ADJUSTMENTS["verified_stock"]
+        reasons.append("VERIFIED_STOCK")
+    if factors.has_physical_address:
+        score += _ADJUSTMENTS["has_physical_address"]
+        reasons.append("HAS_PHYSICAL_ADDRESS")
+
+    # Clamp to 0-100
+    clamped = max(0, min(100, score))
+    if clamped != score:
+        reasons.append("CLAMPED")
+    return clamped, reasons
+
+
 def calculate_trust_score(factors: TrustFactors) -> int:
     """Calculate trust score from factors.
 
@@ -61,23 +95,8 @@ def calculate_trust_score(factors: TrustFactors) -> int:
     Returns:
         Trust score (0-100).
     """
-    score = _TIER_BASE_SCORES[factors.merchant_tier]
-
-    if not factors.has_shipping_info:
-        score += _ADJUSTMENTS["missing_shipping"]
-    if not factors.has_warranty_info:
-        score += _ADJUSTMENTS["missing_warranty"]
-    if not factors.has_return_policy:
-        score += _ADJUSTMENTS["missing_return_policy"]
-    if not factors.price_within_expected_range:
-        score += _ADJUSTMENTS["price_anomaly"]
-    if factors.verified_stock:
-        score += _ADJUSTMENTS["verified_stock"]
-    if factors.has_physical_address:
-        score += _ADJUSTMENTS["has_physical_address"]
-
-    # Clamp to 0-100
-    return max(0, min(100, score))
+    score, _ = calculate_trust_score_with_reasons(factors)
+    return score
 
 
 def detect_price_anomaly(
