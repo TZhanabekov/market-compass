@@ -25,6 +25,21 @@ Redirect endpoint must:
 - quarantine low-confidence offers
 - maintain merchant allow/block lists
 
+## LLM safety (optional features)
+If we introduce an LLM (e.g. GPT‑5‑mini) for parsing/matching/scoring signals:
+- Treat LLM output as **untrusted input**:
+  - validate strict JSON against a schema
+  - clamp numeric ranges (e.g. trust 0..100, confidence 0..1)
+  - reject/ignore unknown fields
+- Prevent prompt injection:
+  - never pass user-provided free text beyond the minimal product fields (title/snippet)
+  - never allow the model to call tools or fetch URLs
+  - forbid the model from emitting URLs used for redirects
+- Data minimization:
+  - do not send personal data (normally none in SerpAPI shopping payloads, but enforce anyway)
+  - avoid storing raw prompts/responses long-term; prefer hashes + small reason codes
+  - if storing raw for debugging, gate behind a debug flag and short retention
+
 ## Compliance
 - don’t store personal data
 - do not fingerprint users

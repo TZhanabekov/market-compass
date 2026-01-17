@@ -138,9 +138,15 @@ def normalize_color(raw: str) -> str:
         Normalized color string.
     """
     color_map = {
-        "space black": "black",
+        "space black": "space-black",
         "space gray": "gray",
         "space grey": "gray",
+        "cloud white": "cloud-white",
+        "mist blue": "mist-blue",
+        "sky blue": "sky-blue",
+        "light gold": "light-gold",
+        "sage": "sage",
+        "lavender": "lavender",
         "natural titanium": "natural",
         "white titanium": "white",
         "black titanium": "black",

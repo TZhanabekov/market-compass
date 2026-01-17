@@ -10,5 +10,6 @@ Models represent database tables:
 from app.models.offer import Offer
 from app.models.sku import GoldenSku
 from app.models.merchant import Merchant
+from app.models.raw_offer import RawOffer
 
-__all__ = ["GoldenSku", "Merchant", "Offer"]
+__all__ = ["GoldenSku", "Merchant", "Offer", "RawOffer"]

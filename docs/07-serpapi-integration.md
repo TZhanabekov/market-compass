@@ -30,6 +30,45 @@ From each `shopping_results[]` item:
 - Normalize + dedup by Golden SKU.
 - Select Top‑10 for UI (and optionally Top‑30 internally).
 
+## Optional: LLM-assisted parsing/matching (GPT‑5‑mini fallback)
+LLM is a **separate cost center** from SerpAPI and must follow the same “cost control” philosophy:
+- deterministic-first (regex/rules)
+- LLM only for ambiguous items
+- strict caching + locks
+
+### What the LLM is allowed to do
+- classify title as accessory/bundle/contract when heuristics are uncertain
+- extract structured attributes (model/storage/color/condition variants)
+- choose a Golden SKU **from a constrained candidate list** and return `match_confidence`
+- emit small reason codes for explainability/review
+
+### What the LLM must NOT do
+- no open web browsing at request time
+- no calling SerpAPI immersive in bulk (LLM doesn’t change SerpAPI rules)
+- no unbounded/free-form outputs (must be strict JSON validated server-side)
+
+### Caching and locks (LLM)
+Recommended keys:
+- `llm:parse:{hash(title + condition + merchant + model_hint)}` → parsed JSON (TTL: 30–180d)
+- `lock:llm:parse:{same-hash}` → short lock (TTL: 30–120s)
+
+Rationale:
+- titles repeat heavily across refresh runs
+- prevents thundering herd during ingestion bursts
+
+### Multi-language titles (production reality)
+SerpAPI shopping `title` varies by country and may be non-English.
+
+Practical approach:
+- Prefer structured SerpAPI fields when available (e.g. `second_hand_condition`) over title heuristics for condition.
+- Keep deterministic extraction language-agnostic where possible (e.g. digits + `GB/TB` for storage).
+- Maintain small per-language token dictionaries for:
+  - colors
+  - accessory keywords
+  - contract/plan keywords
+  - “new/used/refurb” indicators (as secondary signals)
+- Use GPT‑5‑mini only for **single-variant** listings where critical attrs are missing; skip LLM on multi-variant enumerations.
+
 ## Selective hydration: google_immersive_product
 
 ### What we need from immersive

@@ -106,14 +106,22 @@ _COLOR_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"black\s*titanium", re.IGNORECASE), "black"),
     (re.compile(r"blue\s*titanium", re.IGNORECASE), "blue"),
     (re.compile(r"desert\s*titanium", re.IGNORECASE), "desert"),
+    # iPhone 17 (standard) colors (2025)
+    (re.compile(r"\bmist\s*blue\b", re.IGNORECASE), "mist-blue"),
+    (re.compile(r"\bsage\b", re.IGNORECASE), "sage"),
+    (re.compile(r"\blavender\b", re.IGNORECASE), "lavender"),
+    # iPhone 17 Air colors (2025)
+    (re.compile(r"\bsky\s*blue\b", re.IGNORECASE), "sky-blue"),
+    (re.compile(r"\bcloud\s*white\b", re.IGNORECASE), "cloud-white"),
+    (re.compile(r"\blight\s*gold\b", re.IGNORECASE), "light-gold"),
+    (re.compile(r"\bspace\s*black\b", re.IGNORECASE), "space-black"),
     # iPhone 17 Pro colors (2025)
     (re.compile(r"deep\s*blue", re.IGNORECASE), "deep-blue"),
     (re.compile(r"cosmic\s*orange", re.IGNORECASE), "cosmic-orange"),
     # iPhone 16 colors (2024)
     (re.compile(r"\bultramarine\b", re.IGNORECASE), "ultramarine"),
     (re.compile(r"\bteal\b", re.IGNORECASE), "teal"),
-    # Space colors
-    (re.compile(r"space\s*black", re.IGNORECASE), "black"),
+    # Space colors (generic)
     (re.compile(r"space\s*gr[ae]y", re.IGNORECASE), "gray"),
     # Midnight / Starlight (iPhone 13/14/SE)
     (re.compile(r"\bmidnight\b", re.IGNORECASE), "midnight"),

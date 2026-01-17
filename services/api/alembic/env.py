@@ -24,7 +24,7 @@ load_dotenv()
 
 # Import Base and all models for autogenerate support
 from app.stores.postgres import Base
-from app.models import GoldenSku, Merchant, Offer  # noqa: F401
+from app.models import GoldenSku, Merchant, Offer, RawOffer  # noqa: F401
 
 # this is the Alembic Config object
 config = context.config

@@ -54,6 +54,42 @@ Normalized offers attached to a Golden SKU.
 - `match_confidence` (numeric) — 0..1
 - `first_seen_at`, `last_seen_at`
 
+### 3.1) raw_offers (recommended)
+Raw ingestion buffer for SerpAPI shopping results **before** (or without) Golden SKU attachment.
+
+Rationale:
+- SerpAPI calls are expensive; we do not want to discard “non-target” variants (other storage/colors) returned by a paid query.
+- Current `offers.sku_id` is required (FK), so we need a place to store results even when:
+  - a matching Golden SKU does not exist yet
+  - attributes are ambiguous (multi-variant listings)
+  - we need later reconciliation after improving parsers/LLM prompts
+
+Columns (logical):
+- `raw_offer_id` (uuid, pk; internal/public id)
+- `source` (text) — e.g. "serpapi_google_shopping"
+- `source_request_key` (text) — hash of (query, gl, hl, location) for traceability
+- `source_product_id` (text, nullable) — SerpAPI `product_id` or link-hash fallback
+- `country_code` (char(2))
+- `title_raw` (text)
+- `merchant_name` (text)
+- `product_link` (text)
+- `product_link_hash` (text) — sha256 prefix of product_link for idempotency
+- `immersive_token` (text, nullable)
+- `second_hand_condition` (text, nullable) — raw value from SerpAPI
+- `price_local` (numeric)
+- `currency` (char(3))
+- `thumbnail` (text, nullable)
+- `parsed_attrs_json` (json, nullable) — normalized attrs + confidence (may be stored as JSON-serialized text initially)
+- `flags_json` (json, nullable) — e.g. is_accessory/is_contract/is_multi_variant/condition_conflict (may be stored as JSON-serialized text initially)
+- `matched_sku_id` (uuid/int, nullable) — FK to `golden_skus` when resolved
+- `match_confidence` (numeric, nullable) — 0..1
+- `match_reason_codes` (json, nullable) — compact reason codes for explainability (may be stored as JSON-serialized text initially)
+- `ingested_at`, `updated_at`
+
+Indexes (recommended):
+- unique-ish idempotency key on `(source, country_code, source_product_id)` when present
+- fallback unique-ish key on `(source, country_code, product_link_hash)` when product_id missing
+
 ### 4) materialized_leaderboards
 Optional but strongly recommended for speed.
 
@@ -108,6 +144,10 @@ UI-facing guide steps.
 
 ### Locks (to prevent request storms)
 - `lock:hydrate:{offer_id}` (TTL: 30–120s)
+
+### LLM parsing cache (optional)
+- `llm:parse:{hash(title + second_hand_condition + merchant + gl)}` -> strict JSON result (TTL: 30–180d)
+- `lock:llm:parse:{same-hash}` (TTL: 30–120s)
 
 ### UI payload cache
 - `ui:home:{home}:{sku_key}:{minTrustBucket}` -> HomeResponse (TTL: 30–300s)

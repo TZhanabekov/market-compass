@@ -18,6 +18,9 @@ Cost control:
 """
 
 import logging
+import hashlib
+import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -25,7 +28,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import GoldenSku, Merchant, Offer
+from app.models import GoldenSku, Merchant, Offer, RawOffer
 from app.services.attribute_extractor import (
     ExtractionConfidence,
     extract_attributes,
@@ -146,6 +149,8 @@ async def ingest_offers_for_sku(
     # Build search query from SKU key
     query = _sku_key_to_search_query(sku_key)
     gl = COUNTRY_GL_MAP.get(country_code.upper(), "us")
+    # Stable request key for traceability/idempotency (mirrors SerpAPI cache key intent)
+    source_request_key = hashlib.sha256(f"{query}:{gl}:en:".encode()).hexdigest()[:64]
 
     logger.info(f"Starting ingestion for SKU={sku_key}, country={country_code}, query={query}")
 
@@ -191,6 +196,7 @@ async def ingest_offers_for_sku(
                     fx_rates=fx_rates,
                     config=config,
                     stats=stats,
+                    source_request_key=source_request_key,
                 )
             except Exception as e:
                 logger.error(f"Error processing result {result.product_id}: {e}")
@@ -211,6 +217,7 @@ async def _process_shopping_result(
     fx_rates: FxRates | None,
     config: IngestionConfig,
     stats: IngestionStats,
+    source_request_key: str,
 ) -> bool:
     """Process a single shopping result.
 
@@ -228,6 +235,16 @@ async def _process_shopping_result(
 
     # Extract attributes (model, storage, color) from title
     extraction = extract_attributes(result.title)
+
+    # Always persist a raw copy of the paid result (idempotent),
+    # even if it won't match the target SKU.
+    await _upsert_raw_offer(
+        session=session,
+        result=result,
+        country_code=country_code,
+        source_request_key=source_request_key,
+        extraction=extraction,
+    )
 
     # Get condition from SerpAPI second_hand_condition field (more reliable than title parsing)
     # If second_hand_condition is None → new, otherwise normalize the value
@@ -280,6 +297,130 @@ async def _process_shopping_result(
     )
     stats.new_offers += 1
     return True
+
+
+def _hash_product_link(product_link: str) -> str:
+    return hashlib.sha256(product_link.encode()).hexdigest()[:32]
+
+
+def _detect_is_multi_variant(title: str) -> bool:
+    """
+    Multi-variant listings enumerate multiple storages/colors in one title,
+    e.g. "256GB 512GB 1TB" or "256gb/512gb/1tb" or "All colors".
+    """
+    t = title.lower()
+    # Storage enumeration: count distinct storage tokens
+    storages = set()
+    for amount, unit in re.findall(r"(\d+)\s*(gb|tb)", t):
+        token = f"{amount}{unit}"
+        if token in {"64gb", "128gb", "256gb", "512gb", "1tb", "2tb"}:
+            storages.add(token)
+    if len(storages) >= 2:
+        return True
+    # Common enumeration hints
+    if any(p in t for p in ["256gb/512gb", "512gb/1tb", "all colors", "all colour", "all color"]):
+        return True
+    return False
+
+
+def _detect_is_contract(title: str) -> bool:
+    t = title.lower()
+    return any(
+        p in t
+        for p in [
+            "with data plan",
+            "with contract",
+            "monthly payments",
+            "installment payments",
+            "mobile phone plan",
+        ]
+    )
+
+
+async def _upsert_raw_offer(
+    session: AsyncSession,
+    result: ShoppingResult,
+    country_code: str,
+    source_request_key: str,
+    extraction,
+) -> None:
+    """
+    Store raw SerpAPI result in raw_offers (idempotent).
+
+    This does NOT change the existing offers/leaderboard flow; it just preserves
+    paid results for later reconciliation and improved matching.
+    """
+    product_link_hash = _hash_product_link(result.product_link)
+    is_multi_variant = _detect_is_multi_variant(result.title)
+    is_contract = _detect_is_contract(result.title)
+
+    # Serialize minimal parsed artifacts; keep schema flexible.
+    flags = {
+        "is_multi_variant": is_multi_variant,
+        "is_contract": is_contract,
+    }
+    parsed_attrs = {
+        "extraction": {
+            "attributes": extraction.attributes,
+            "confidence": extraction.confidence.value,
+        },
+        "second_hand_condition": result.second_hand_condition,
+    }
+
+    existing: RawOffer | None = None
+    if result.product_id:
+        res = await session.execute(
+            select(RawOffer).where(
+                RawOffer.source == "serpapi_google_shopping",
+                RawOffer.country_code == country_code.upper(),
+                RawOffer.source_product_id == result.product_id,
+            )
+        )
+        existing = res.scalar_one_or_none()
+
+    if existing is None:
+        res = await session.execute(
+            select(RawOffer).where(
+                RawOffer.source == "serpapi_google_shopping",
+                RawOffer.country_code == country_code.upper(),
+                RawOffer.product_link_hash == product_link_hash,
+            )
+        )
+        existing = res.scalar_one_or_none()
+
+    if existing:
+        existing.title_raw = result.title
+        existing.merchant_name = result.merchant
+        existing.product_link = result.product_link
+        existing.immersive_token = result.immersive_token
+        existing.second_hand_condition = result.second_hand_condition
+        existing.thumbnail = result.thumbnail
+        existing.price_local = result.price
+        existing.currency = result.currency
+        existing.flags_json = json.dumps(flags, ensure_ascii=False)
+        existing.parsed_attrs_json = json.dumps(parsed_attrs, ensure_ascii=False)
+        existing.source_request_key = source_request_key
+        return
+
+    session.add(
+        RawOffer(
+            source="serpapi_google_shopping",
+            source_request_key=source_request_key,
+            source_product_id=result.product_id or None,
+            country_code=country_code.upper(),
+            title_raw=result.title,
+            merchant_name=result.merchant,
+            product_link=result.product_link,
+            product_link_hash=product_link_hash,
+            immersive_token=result.immersive_token,
+            second_hand_condition=result.second_hand_condition,
+            thumbnail=result.thumbnail,
+            price_local=result.price,
+            currency=result.currency,
+            parsed_attrs_json=json.dumps(parsed_attrs, ensure_ascii=False),
+            flags_json=json.dumps(flags, ensure_ascii=False),
+        )
+    )
 
 
 def _sku_key_to_search_query(sku_key: str) -> str:
