@@ -341,7 +341,10 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "max_completion_tokens": 2000,
+        # GPT-5: completion tokens include reasoning+output; keep enough room.
+        "max_completion_tokens": 3000,
+        # GPT-5: reduce hidden reasoning to avoid empty content.
+        "reasoning_effort": "minimal",
         # GPT-5 class models: enforce JSON object output when supported.
         "response_format": {"type": "json_object"},
     }
@@ -428,12 +431,15 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
                     break
 
     logger.info(
-        "[pattern_suggest] received request_id=%s response_preview=%s",
+        "[pattern_suggest] received request_id=%s finish_reason=%s response_preview=%s",
         request_id,
+        first_choice.get("finish_reason") if isinstance(first_choice, dict) else None,
         (text_out or "")[:800],
     )
     if not text_out and first_choice is not None:
         logger.info("[pattern_suggest] first_choice_preview=%s", json.dumps(first_choice)[:800])
+        # Treat empty content as an error so the caller can retry / adjust params.
+        raise RuntimeError("LLM returned empty content (likely all tokens spent on reasoning)")
 
     return _extract_first_json_object(text_out) or {}, request_id
 

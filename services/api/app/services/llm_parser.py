@@ -174,6 +174,7 @@ async def choose_sku_key_from_candidates(
             ],
             "max_completion_tokens": 500,
             "response_format": {"type": "json_object"},
+            "reasoning_effort": "minimal",
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
