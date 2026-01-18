@@ -546,6 +546,7 @@ Read a recent sample of `raw_offers` (title + product_link) and ask the LLM to p
 - `sample_limit` (int, default `2000`, max `2000`)
 - `llm_batches` (int, default `3`, max `4`)
 - `items_per_batch` (int, default `80`, max `80`)
+- `force_refresh` (bool, default `false`) — bypass Redis cache and force LLM calls
 
 **Example**
 
@@ -555,7 +556,8 @@ curl -sS "$API_BASE_URL/v1/admin/patterns/suggest" \
   -d '{
     "sample_limit": 2000,
     "llm_batches": 3,
-    "items_per_batch": 80
+    "items_per_batch": 80,
+    "force_refresh": true
   }'
 ```
 

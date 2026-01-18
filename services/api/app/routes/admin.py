@@ -601,6 +601,7 @@ class PatternSuggestRequest(BaseModel):
     sample_limit: int = 2000
     llm_batches: int = 3
     items_per_batch: int = 80
+    force_refresh: bool = False
 
 
 @router.post("/patterns/suggest")
@@ -613,6 +614,7 @@ async def suggest_patterns_endpoint(req: PatternSuggestRequest) -> dict:
                 sample_limit=req.sample_limit,
                 llm_batches=req.llm_batches,
                 items_per_batch=req.items_per_batch,
+                force_refresh=req.force_refresh,
             )
         except RuntimeError as e:
             msg = str(e)

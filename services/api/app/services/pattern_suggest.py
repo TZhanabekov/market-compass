@@ -119,6 +119,7 @@ async def suggest_patterns(
     sample_limit: int = 2000,
     llm_batches: int = 3,
     items_per_batch: int = 80,
+    force_refresh: bool = False,
 ) -> PatternSuggestResult:
     settings = get_settings()
     if not settings.llm_enabled or not settings.openai_api_key:
@@ -155,33 +156,10 @@ async def suggest_patterns(
         fp_parts.append(u[:80])
     cache_key = f"{PREFIX_SUGGEST_CACHE}{_hash_key(str(sample_size), *fp_parts)}"
 
-    cached = await cache_get(cache_key)
-    if cached:
-        payload = _extract_first_json_object(cached)
-        if isinstance(payload, dict):
-            parsed = PatternSuggestResponse.model_validate(payload)
-            suggestions = _score_suggestions(parsed, rows)
-            return PatternSuggestResult(
-                cached=True,
-                llm_calls=0,
-                llm_successful_calls=0,
-                sample_size=sample_size,
-                errors=[],
-                suggestions=suggestions,
-                raw=payload,
-            )
-
-    lock_key = f"{PREFIX_SUGGEST_LOCK}{_hash_key(cache_key)}"
-    got_lock = await acquire_lock(lock_key, ttl=TTL_SUGGEST_LOCK)
-    if not got_lock:
-        raise RuntimeError("pattern_suggest is already running")
-
-    llm_calls = 0
-    try:
-        # Re-check cache after lock
-        cached2 = await cache_get(cache_key)
-        if cached2:
-            payload = _extract_first_json_object(cached2)
+    if not force_refresh:
+        cached = await cache_get(cache_key)
+        if cached:
+            payload = _extract_first_json_object(cached)
             if isinstance(payload, dict):
                 parsed = PatternSuggestResponse.model_validate(payload)
                 suggestions = _score_suggestions(parsed, rows)
@@ -194,6 +172,31 @@ async def suggest_patterns(
                     suggestions=suggestions,
                     raw=payload,
                 )
+
+    lock_key = f"{PREFIX_SUGGEST_LOCK}{_hash_key(cache_key)}"
+    got_lock = await acquire_lock(lock_key, ttl=TTL_SUGGEST_LOCK)
+    if not got_lock:
+        raise RuntimeError("pattern_suggest is already running")
+
+    llm_calls = 0
+    try:
+        # Re-check cache after lock
+        if not force_refresh:
+            cached2 = await cache_get(cache_key)
+            if cached2:
+                payload = _extract_first_json_object(cached2)
+                if isinstance(payload, dict):
+                    parsed = PatternSuggestResponse.model_validate(payload)
+                    suggestions = _score_suggestions(parsed, rows)
+                    return PatternSuggestResult(
+                        cached=True,
+                        llm_calls=0,
+                        llm_successful_calls=0,
+                        sample_size=sample_size,
+                        errors=[],
+                        suggestions=suggestions,
+                        raw=payload,
+                    )
 
         # Build representative batches (evenly spaced)
         batches: list[list[dict[str, str]]] = []
@@ -252,8 +255,27 @@ async def suggest_patterns(
             "llm_calls": llm_calls,
             "llm_successful_calls": ok_calls,
             "errors": errors,
+            "cache_key": cache_key,
+            "force_refresh": bool(force_refresh),
         }
         payload["_raw_llm_payloads"] = raw_payloads[:5]
+
+        # Log compact debug info for observability (avoid logging huge raw inputs).
+        logger.info(
+            "[pattern_suggest] done cached=%s force_refresh=%s sample=%s llm_calls=%s ok=%s errors=%s cache_key=%s",
+            False,
+            bool(force_refresh),
+            sample_size,
+            llm_calls,
+            ok_calls,
+            len(errors),
+            cache_key,
+        )
+        if raw_payloads:
+            logger.info(
+                "[pattern_suggest] openai_request_ids=%s",
+                [x.get("openai_request_id") for x in raw_payloads if isinstance(x, dict)],
+            )
 
         await cache_set(cache_key, json.dumps(payload, ensure_ascii=False), TTL_SUGGEST_CACHE)
 
@@ -322,6 +344,15 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
         "max_completion_tokens": 2000,
     }
 
+    # Log what we send (truncated) for debugging.
+    logger.info(
+        "[pattern_suggest] sending model=%s host=%s batch_items=%s prompt_preview=%s",
+        settings.openai_model_parse,
+        urlparse(settings.openai_base_url).hostname if settings.openai_base_url else None,
+        len(items),
+        (system_prompt + "\n\n" + user_prompt)[:800],
+    )
+
     # Retry transient upstream failures (502/503/504/429).
     waits = [0.0, 1.0, 2.0, 4.0]
     last_err: str | None = None
@@ -374,6 +405,12 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
                 if isinstance(msg, dict) and isinstance(msg.get("content"), str):
                     text_out = msg["content"]
                     break
+
+    logger.info(
+        "[pattern_suggest] received request_id=%s response_preview=%s",
+        request_id,
+        (text_out or "")[:800],
+    )
 
     return _extract_first_json_object(text_out) or {}, request_id
 
