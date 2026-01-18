@@ -173,7 +173,7 @@ async def choose_sku_key_from_candidates(
                 {"role": "user", "content": user_prompt},
             ],
             "temperature": 0.0,
-            "max_tokens": 500,
+            "max_completion_tokens": 500,
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:

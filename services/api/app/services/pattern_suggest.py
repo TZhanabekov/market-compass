@@ -320,7 +320,7 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> dict[str, Any]:
             {"role": "user", "content": user_prompt},
         ],
         "temperature": 0.0,
-        "max_tokens": 2000,
+        "max_completion_tokens": 2000,
     }
 
     # Retry transient upstream failures (502/503/504/429).
@@ -349,6 +349,10 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> dict[str, Any]:
                 f"[pattern_suggest] LLM HTTP {status} attempt={attempt}/{len(waits)} "
                 f"url={url} model={settings.openai_model_parse} response={response_text}"
             )
+            # 400 = invalid request (e.g. bad model/param) - don't retry
+            if status == 400:
+                raise RuntimeError(f"LLM invalid request (HTTP 400): {response_text[:200]}") from e
+            # Retry transient errors
             if status in (429, 500, 502, 503, 504):
                 last_err = f"LLM upstream HTTP {status}"
                 continue
