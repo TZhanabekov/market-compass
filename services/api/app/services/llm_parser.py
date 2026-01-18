@@ -144,7 +144,7 @@ async def choose_sku_key_from_candidates(
                 if res:
                     return res
 
-        prompt = (
+        system_prompt = (
             "You are a product-title parser for iPhone SKUs.\n"
             "Choose the single best sku_key from the provided candidates.\n"
             "Return ONLY valid JSON matching this shape:\n"
@@ -153,7 +153,10 @@ async def choose_sku_key_from_candidates(
             "Rules:\n"
             "- sku_key MUST be exactly one of the candidates\n"
             "- match_confidence is 0..1\n"
-            "- Do not include any extra keys\n\n"
+            "- Do not include any extra keys"
+        )
+
+        user_prompt = (
             f"title: {title}\n"
             f"second_hand_condition: {cond}\n"
             f"merchant: {merchant}\n"
@@ -161,11 +164,16 @@ async def choose_sku_key_from_candidates(
             + "\n".join(f"- {c}" for c in candidates)
         )
 
-        url = settings.openai_base_url.rstrip("/") + "/responses"
-        headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
+        url = settings.openai_base_url.rstrip("/") + "/chat/completions"
+        headers = {"Authorization": f"Bearer {settings.openai_api_key}", "Content-Type": "application/json"}
         body = {
             "model": settings.openai_model_parse,
-            "input": prompt,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.0,
+            "max_tokens": 500,
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -173,21 +181,15 @@ async def choose_sku_key_from_candidates(
             r.raise_for_status()
             data = r.json()
 
-        # Try to extract text output from common response shapes
+        # Extract from chat completions response: choices[0].message.content
         text_out = ""
-        if isinstance(data, dict):
-            if isinstance(data.get("output_text"), str):
-                text_out = data["output_text"]
-            elif isinstance(data.get("output"), list):
-                # responses API: output -> [{content:[{type:"output_text", text:"..."}]}]
-                chunks: list[str] = []
-                for item in data["output"]:
-                    content = item.get("content") if isinstance(item, dict) else None
-                    if isinstance(content, list):
-                        for c in content:
-                            if isinstance(c, dict) and isinstance(c.get("text"), str):
-                                chunks.append(c["text"])
-                text_out = "\n".join(chunks)
+        if isinstance(data, dict) and isinstance(data.get("choices"), list):
+            for choice in data["choices"]:
+                if isinstance(choice, dict):
+                    msg = choice.get("message")
+                    if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                        text_out = msg["content"]
+                        break
 
         payload = _extract_first_json_object(text_out) or {}
         # Cache raw for future runs (even if invalid; it may still be useful to inspect via DB raw attrs)
