@@ -172,7 +172,6 @@ async def choose_sku_key_from_candidates(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.0,
             "max_completion_tokens": 500,
         }
 

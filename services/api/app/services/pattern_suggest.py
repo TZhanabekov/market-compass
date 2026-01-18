@@ -319,7 +319,6 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> dict[str, Any]:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": 0.0,
         "max_completion_tokens": 2000,
     }
 
