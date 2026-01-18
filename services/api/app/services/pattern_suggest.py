@@ -342,6 +342,8 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
             {"role": "user", "content": user_prompt},
         ],
         "max_completion_tokens": 2000,
+        # GPT-5 class models: enforce JSON object output when supported.
+        "response_format": {"type": "json_object"},
     }
 
     # Log what we send (truncated) for debugging.
@@ -396,14 +398,33 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
     if data is None:
         raise RuntimeError(last_err or "LLM request failed")
 
-    # Extract from chat completions response: choices[0].message.content
+    # Extract from chat completions response.
+    # Depending on model/SDK, message.content can be a string OR a list of content parts.
     text_out = ""
+    first_choice: dict[str, Any] | None = None
+    if isinstance(data.get("choices"), list) and data["choices"]:
+        c0 = data["choices"][0]
+        if isinstance(c0, dict):
+            first_choice = c0
+
     if isinstance(data.get("choices"), list):
         for choice in data["choices"]:
-            if isinstance(choice, dict):
-                msg = choice.get("message")
-                if isinstance(msg, dict) and isinstance(msg.get("content"), str):
-                    text_out = msg["content"]
+            if not isinstance(choice, dict):
+                continue
+            msg = choice.get("message")
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content")
+            if isinstance(content, str):
+                text_out = content
+                break
+            if isinstance(content, list):
+                parts: list[str] = []
+                for part in content:
+                    if isinstance(part, dict) and isinstance(part.get("text"), str):
+                        parts.append(part["text"])
+                if parts:
+                    text_out = "\n".join(parts)
                     break
 
     logger.info(
@@ -411,6 +432,8 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
         request_id,
         (text_out or "")[:800],
     )
+    if not text_out and first_choice is not None:
+        logger.info("[pattern_suggest] first_choice_preview=%s", json.dumps(first_choice)[:800])
 
     return _extract_first_json_object(text_out) or {}, request_id
 

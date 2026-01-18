@@ -173,6 +173,7 @@ async def choose_sku_key_from_candidates(
                 {"role": "user", "content": user_prompt},
             ],
             "max_completion_tokens": 500,
+            "response_format": {"type": "json_object"},
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -180,14 +181,26 @@ async def choose_sku_key_from_candidates(
             r.raise_for_status()
             data = r.json()
 
-        # Extract from chat completions response: choices[0].message.content
+        # Extract from chat completions response.
         text_out = ""
         if isinstance(data, dict) and isinstance(data.get("choices"), list):
             for choice in data["choices"]:
-                if isinstance(choice, dict):
-                    msg = choice.get("message")
-                    if isinstance(msg, dict) and isinstance(msg.get("content"), str):
-                        text_out = msg["content"]
+                if not isinstance(choice, dict):
+                    continue
+                msg = choice.get("message")
+                if not isinstance(msg, dict):
+                    continue
+                content = msg.get("content")
+                if isinstance(content, str):
+                    text_out = content
+                    break
+                if isinstance(content, list):
+                    parts: list[str] = []
+                    for part in content:
+                        if isinstance(part, dict) and isinstance(part.get("text"), str):
+                            parts.append(part["text"])
+                    if parts:
+                        text_out = "\n".join(parts)
                         break
 
         payload = _extract_first_json_object(text_out) or {}
