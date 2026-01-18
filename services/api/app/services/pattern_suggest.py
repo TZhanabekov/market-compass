@@ -222,8 +222,8 @@ async def suggest_patterns(
         for b in batches:
             llm_calls += 1
             try:
-                p = await _call_llm_suggest(b)
-                raw_payloads.append(p)
+                p, request_id = await _call_llm_suggest(b)
+                raw_payloads.append({"openai_request_id": request_id, "payload": p})
                 parsed = PatternSuggestResponse.model_validate(p)
                 ok_calls += 1
             except (RuntimeError, ValidationError) as e:
@@ -289,7 +289,7 @@ def _dedup_norm(items: list[str], *, limit: int) -> list[str]:
     return out
 
 
-async def _call_llm_suggest(items: list[dict[str, str]]) -> dict[str, Any]:
+async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any], str | None]:
     settings = get_settings()
     system_prompt = (
         "You analyze iPhone shopping listings.\n"
@@ -326,6 +326,7 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> dict[str, Any]:
     waits = [0.0, 1.0, 2.0, 4.0]
     last_err: str | None = None
     data: dict[str, Any] | None = None
+    request_id: str | None = None
 
     for attempt, wait_s in enumerate(waits, 1):
         if wait_s > 0:
@@ -334,6 +335,7 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> dict[str, Any]:
             async with httpx.AsyncClient(timeout=90.0) as client:
                 r = await client.post(url, headers=headers, json=body)
                 r.raise_for_status()
+                request_id = r.headers.get("x-request-id")
                 data_raw = r.json()
                 data = data_raw if isinstance(data_raw, dict) else {}
                 last_err = None
@@ -373,7 +375,7 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> dict[str, Any]:
                     text_out = msg["content"]
                     break
 
-    return _extract_first_json_object(text_out) or {}
+    return _extract_first_json_object(text_out) or {}, request_id
 
 
 def _score_suggestions(parsed: PatternSuggestResponse, rows: list[tuple[str, str]]) -> dict[str, list[SuggestionItem]]:
