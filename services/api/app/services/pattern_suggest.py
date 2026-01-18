@@ -12,9 +12,11 @@ Safety:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
+import random
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -105,7 +107,9 @@ class SuggestionItem:
 class PatternSuggestResult:
     cached: bool
     llm_calls: int
+    llm_successful_calls: int
     sample_size: int
+    errors: list[str]
     suggestions: dict[str, list[SuggestionItem]]
     raw: dict[str, Any]
 
@@ -138,7 +142,9 @@ async def suggest_patterns(
         return PatternSuggestResult(
             cached=False,
             llm_calls=0,
+            llm_successful_calls=0,
             sample_size=0,
+            errors=[],
             suggestions={},
             raw={"ok": True, "empty": True},
         )
@@ -159,7 +165,9 @@ async def suggest_patterns(
             return PatternSuggestResult(
                 cached=True,
                 llm_calls=0,
+                llm_successful_calls=0,
                 sample_size=sample_size,
+                errors=[],
                 suggestions=suggestions,
                 raw=payload,
             )
@@ -181,7 +189,9 @@ async def suggest_patterns(
                 return PatternSuggestResult(
                     cached=True,
                     llm_calls=0,
+                    llm_successful_calls=0,
                     sample_size=sample_size,
+                    errors=[],
                     suggestions=suggestions,
                     raw=payload,
                 )
@@ -207,20 +217,27 @@ async def suggest_patterns(
 
         merged = PatternSuggestResponse()
         raw_payloads: list[dict[str, Any]] = []
+        errors: list[str] = []
+        ok_calls = 0
 
         for b in batches:
             llm_calls += 1
-            p = await _call_llm_suggest(b)
-            raw_payloads.append(p)
             try:
+                p = await _call_llm_suggest(b)
+                raw_payloads.append(p)
                 parsed = PatternSuggestResponse.model_validate(p)
-            except ValidationError:
+                ok_calls += 1
+            except (RuntimeError, ValidationError) as e:
+                errors.append(str(e)[:200])
                 continue
 
             merged.contract.extend(parsed.contract)
             merged.condition_new.extend(parsed.condition_new)
             merged.condition_used.extend(parsed.condition_used)
             merged.condition_refurbished.extend(parsed.condition_refurbished)
+
+        if ok_calls == 0:
+            raise RuntimeError("LLM upstream error (all batches failed)")
 
         # normalize + de-dup, keep short lists
         out = PatternSuggestResponse(
@@ -234,6 +251,8 @@ async def suggest_patterns(
         payload["_meta"] = {
             "sample_size": sample_size,
             "llm_calls": llm_calls,
+            "llm_successful_calls": ok_calls,
+            "errors": errors,
         }
         payload["_raw_llm_payloads"] = raw_payloads[:5]
 
@@ -243,7 +262,9 @@ async def suggest_patterns(
         return PatternSuggestResult(
             cached=False,
             llm_calls=llm_calls,
+            llm_successful_calls=ok_calls,
             sample_size=sample_size,
+            errors=errors,
             suggestions=suggestions,
             raw=payload,
         )
@@ -270,51 +291,141 @@ def _dedup_norm(items: list[str], *, limit: int) -> list[str]:
 
 
 async def _call_llm_suggest(items: list[dict[str, str]]) -> dict[str, Any]:
+    """Call OpenAI Responses API with structured JSON output for pattern suggestions."""
     settings = get_settings()
+    
+    # Limit items to prevent oversized prompts (max ~50 items per batch)
+    items = items[:50]
+    
+    # Build compact prompt
+    inputs_text = "\n".join(
+        f"{i+1}. title: {x['title'][:100]} | link: {x['link_hint'][:80]}"
+        for i, x in enumerate(items)
+    )
+    
     prompt = (
-        "You analyze iPhone shopping listings.\n"
-        "Task: propose literal phrases (not regex) that help detect:\n"
-        "- contract/plan listings (subscription/installments)\n"
-        "- condition hints: new vs used vs refurbished\n\n"
-        "You MUST use only phrases that appear in the provided inputs (title or link_hint).\n"
-        "Return ONLY valid JSON with exactly these keys:\n"
-        '{ "contract": string[], "condition_new": string[], "condition_used": string[], "condition_refurbished": string[] }\n'
+        "Analyze iPhone shopping listings and propose literal phrases (not regex) to detect:\n"
+        "- contract/plan (subscription/installments)\n"
+        "- condition: new vs used vs refurbished\n\n"
         "Rules:\n"
-        "- lowercase phrases\n"
-        "- phrases are 2..80 chars\n"
-        "- no regex syntax, no wildcards\n"
-        "- prefer multi-word phrases when possible\n\n"
-        "inputs:\n"
-        + "\n".join(f"- title: {x['title']}\n  link_hint: {x['link_hint']}" for x in items[:250])
+        "- Use ONLY phrases that appear in the inputs below\n"
+        "- lowercase, 2-80 chars, no regex/wildcards\n"
+        "- Prefer multi-word phrases\n\n"
+        f"Inputs:\n{inputs_text}\n\n"
+        "Return valid JSON with keys: contract, condition_new, condition_used, condition_refurbished (each is string[])."
     )
 
     url = settings.openai_base_url.rstrip("/") + "/responses"
     headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
-    body = {"model": settings.openai_model_parse, "input": prompt}
+    
+    # Use structured output (JSON mode) to force valid JSON
+    body = {
+        "model": settings.openai_model_parse,
+        "input": prompt,
+        "text": {
+            "type": "json",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "contract": {"type": "array", "items": {"type": "string"}},
+                    "condition_new": {"type": "array", "items": {"type": "string"}},
+                    "condition_used": {"type": "array", "items": {"type": "string"}},
+                    "condition_refurbished": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["contract", "condition_new", "condition_used", "condition_refurbished"],
+            },
+        },
+    }
 
-    try:
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            r = await client.post(url, headers=headers, json=body)
-            r.raise_for_status()
-            data = r.json()
-    except httpx.TimeoutException as e:
-        raise RuntimeError("LLM request timed out") from e
+    # Exponential backoff with jitter for retries
+    max_retries = 4
+    base_delay = 1.0
+    last_err: str | None = None
+    data: dict[str, Any] | None = None
 
+    for attempt in range(max_retries):
+        if attempt > 0:
+            # Exponential backoff: 1s, 2s, 4s, 8s + jitter
+            delay = base_delay * (2 ** (attempt - 1)) + random.uniform(0, 0.5)
+            await asyncio.sleep(delay)
+        
+        try:
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                r = await client.post(url, headers=headers, json=body)
+                r.raise_for_status()
+                data_raw = r.json()
+                data = data_raw if isinstance(data_raw, dict) else {}
+                last_err = None
+                break
+        except httpx.TimeoutException:
+            last_err = "LLM request timed out"
+            if attempt == max_retries - 1:
+                break
+        except httpx.HTTPStatusError as e:
+            status = int(e.response.status_code) if e.response is not None else 0
+            if status in (429, 500, 502, 503, 504):
+                last_err = f"LLM upstream HTTP {status}"
+                # For 429, wait longer before retry
+                if status == 429 and attempt < max_retries - 1:
+                    await asyncio.sleep(5.0 + random.uniform(0, 2.0))
+                continue
+            raise RuntimeError(f"LLM upstream HTTP {status}") from e
+        except Exception as e:
+            last_err = f"LLM request failed: {type(e).__name__}: {str(e)[:100]}"
+            if attempt == max_retries - 1:
+                break
+
+    if data is None:
+        raise RuntimeError(last_err or "LLM request failed")
+
+    # Extract JSON from response (structured output should return JSON directly)
     text_out = ""
-    if isinstance(data, dict):
-        if isinstance(data.get("output_text"), str):
-            text_out = data["output_text"]
-        elif isinstance(data.get("output"), list):
-            chunks: list[str] = []
-            for item in data["output"]:
-                content = item.get("content") if isinstance(item, dict) else None
+    
+    # Try multiple response shapes (Responses API can vary)
+    if isinstance(data.get("output_text"), str):
+        text_out = str(data["output_text"])
+    elif isinstance(data.get("output"), list):
+        # output: [{content: [{type: "output_text", text: "..."}]}]
+        chunks: list[str] = []
+        for item in data["output"]:
+            if isinstance(item, dict):
+                content = item.get("content")
                 if isinstance(content, list):
                     for c in content:
-                        if isinstance(c, dict) and isinstance(c.get("text"), str):
-                            chunks.append(c["text"])
-            text_out = "\n".join(chunks)
+                        if isinstance(c, dict):
+                            # Try "text" field
+                            if isinstance(c.get("text"), str):
+                                chunks.append(c["text"])
+                            # Try "output_text" field
+                            elif isinstance(c.get("output_text"), str):
+                                chunks.append(c["output_text"])
+        text_out = "\n".join(chunks)
+    elif isinstance(data.get("choices"), list):
+        # Fallback: chat-completions-like structure
+        for choice in data["choices"]:
+            if isinstance(choice, dict):
+                msg = choice.get("message") or choice.get("text")
+                if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                    text_out = msg["content"]
+                    break
+                elif isinstance(msg, str):
+                    text_out = msg
+                    break
 
-    return _extract_first_json_object(text_out) or {}
+    # Parse JSON (structured output should return valid JSON)
+    if text_out.strip():
+        parsed = _extract_first_json_object(text_out)
+        if parsed:
+            return parsed
+    
+    # If structured output worked, data might have the JSON directly
+    if isinstance(data, dict):
+        # Check if response already has our schema keys
+        if all(k in data for k in ["contract", "condition_new", "condition_used", "condition_refurbished"]):
+            return data
+    
+    logger.warning(f"Could not extract JSON from LLM response: {data.keys() if isinstance(data, dict) else type(data)}")
+    return {}
 
 
 def _score_suggestions(parsed: PatternSuggestResponse, rows: list[tuple[str, str]]) -> dict[str, list[SuggestionItem]]:

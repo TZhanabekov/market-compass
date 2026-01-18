@@ -566,7 +566,9 @@ curl -sS "$API_BASE_URL/v1/admin/patterns/suggest" \
   "ok": true,
   "cached": false,
   "llm_calls": 3,
+  "llm_successful_calls": 2,
   "sample_size": 2000,
+  "errors": ["LLM upstream HTTP 502"],
   "suggestions": {
     "contract": [
       {

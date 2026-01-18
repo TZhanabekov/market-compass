@@ -618,13 +618,17 @@ async def suggest_patterns_endpoint(req: PatternSuggestRequest) -> dict:
             msg = str(e)
             if "timed out" in msg.lower():
                 raise HTTPException(status_code=504, detail=msg)
+            if "upstream" in msg.lower():
+                raise HTTPException(status_code=502, detail=msg)
             raise HTTPException(status_code=400, detail=msg)
 
     return {
         "ok": True,
         "cached": res.cached,
         "llm_calls": res.llm_calls,
+        "llm_successful_calls": res.llm_successful_calls,
         "sample_size": res.sample_size,
+        "errors": res.errors,
         "suggestions": {
             kind: [
                 {"phrase": x.phrase, "match_count": x.match_count, "examples": x.examples}
