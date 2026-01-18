@@ -328,7 +328,7 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> dict[str, Any]:
     last_err: str | None = None
     data: dict[str, Any] | None = None
 
-    for wait_s in waits:
+    for attempt, wait_s in enumerate(waits, 1):
         if wait_s > 0:
             await asyncio.sleep(wait_s)
         try:
@@ -341,14 +341,21 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> dict[str, Any]:
                 break
         except httpx.TimeoutException:
             last_err = "LLM request timed out"
+            logger.warning(f"[pattern_suggest] LLM timeout attempt={attempt}/{len(waits)}")
         except httpx.HTTPStatusError as e:
             status = int(e.response.status_code) if e.response is not None else 0
+            response_text = e.response.text[:500] if e.response is not None else ""
+            logger.warning(
+                f"[pattern_suggest] LLM HTTP {status} attempt={attempt}/{len(waits)} "
+                f"url={url} model={settings.openai_model_parse} response={response_text}"
+            )
             if status in (429, 500, 502, 503, 504):
                 last_err = f"LLM upstream HTTP {status}"
                 continue
-            raise RuntimeError(f"LLM upstream HTTP {status}") from e
+            raise RuntimeError(f"LLM upstream HTTP {status}: {response_text[:200]}") from e
         except Exception as e:
             last_err = f"LLM request failed: {type(e).__name__}"
+            logger.exception(f"[pattern_suggest] LLM unexpected error attempt={attempt}/{len(waits)}")
 
     if data is None:
         raise RuntimeError(last_err or "LLM request failed")

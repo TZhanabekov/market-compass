@@ -199,6 +199,14 @@ async def choose_sku_key_from_candidates(
         if res is None:
             logger.warning("LLM parse invalid or out-of-candidates")
         return res
+    except httpx.HTTPStatusError as e:
+        status = int(e.response.status_code) if e.response is not None else 0
+        response_text = e.response.text[:500] if e.response is not None else ""
+        logger.error(
+            f"[llm_parser] OpenAI HTTP {status} url={url} model={settings.openai_model_parse} "
+            f"response={response_text}"
+        )
+        return None
     except Exception:
         logger.exception("LLM parse failed")
         return None
