@@ -35,6 +35,7 @@ from app.services.patterns import (
 from app.settings import get_settings
 from app.stores.postgres import get_session
 from app.models.pattern_phrase import PatternPhrase
+from app.models.pattern_suggestion import PatternSuggestion
 from sqlalchemy import select
 
 router = APIRouter()
@@ -641,3 +642,43 @@ async def suggest_patterns_endpoint(req: PatternSuggestRequest) -> dict:
             for kind, items in res.suggestions.items()
         },
     }
+
+
+@router.get("/patterns/suggestions")
+async def list_pattern_suggestions(
+    kind: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    min_match_count: int = Query(default=1, ge=0, le=10_000),
+) -> dict:
+    """List persisted LLM pattern suggestions with match frequency."""
+    async with get_session() as session:
+        q = select(PatternSuggestion)
+        if kind:
+            q = q.where(PatternSuggestion.kind == kind)
+        q = q.where(PatternSuggestion.match_count_last >= int(min_match_count))
+        q = q.order_by(PatternSuggestion.match_count_last.desc()).limit(int(limit))
+        res = await session.execute(q)
+        rows = res.scalars().all()
+
+        active_res = await session.execute(
+            select(PatternPhrase.kind, PatternPhrase.phrase).where(PatternPhrase.enabled.is_(True))
+        )
+        active = {(str(k), str(p)) for (k, p) in active_res.all()}
+
+    out = []
+    for r in rows:
+        out.append(
+            {
+                "id": r.id,
+                "kind": r.kind,
+                "phrase": r.phrase,
+                "match_count_last": r.match_count_last,
+                "sample_size_last": r.sample_size_last,
+                "match_count_max": r.match_count_max,
+                "applied": (str(r.kind), str(r.phrase)) in active,
+                "last_run_id": r.last_run_id,
+                "last_seen_at": r.last_seen_at.isoformat() if r.last_seen_at else None,
+            }
+        )
+
+    return {"ok": True, "count": len(out), "suggestions": out}

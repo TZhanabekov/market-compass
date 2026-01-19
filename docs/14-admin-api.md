@@ -591,6 +591,43 @@ curl -sS "$API_BASE_URL/v1/admin/patterns/suggest" \
 }
 ```
 
+### `GET /v1/admin/patterns/suggestions`
+
+List persisted suggestions (stored from previous `patterns/suggest` runs), including match frequency.
+
+Query parameters:
+- `kind` (optional)
+- `limit` (default `100`, max `500`)
+- `min_match_count` (default `1`)
+
+**Example**
+
+```bash
+curl -sS "$API_BASE_URL/v1/admin/patterns/suggestions?kind=contract&limit=50&min_match_count=2"
+```
+
+**Example response**
+
+```json
+{
+  "ok": true,
+  "count": 2,
+  "suggestions": [
+    {
+      "id": 10,
+      "kind": "contract",
+      "phrase": "monthly payments",
+      "match_count_last": 42,
+      "sample_size_last": 2000,
+      "match_count_max": 42,
+      "applied": false,
+      "last_run_id": "b61b0c0d9f8b4c6a9a3d",
+      "last_seen_at": "2026-01-18T08:00:00+00:00"
+    }
+  ]
+}
+```
+
 **Errors**
 - `400`: LLM not enabled/configured OR another suggest run is already running
 

@@ -18,6 +18,8 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from uuid import uuid4
 from typing import Any
 from urllib.parse import urlparse
 
@@ -27,6 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import RawOffer
+from app.models.pattern_suggestion import PatternSuggestion
 from app.settings import get_settings
 from app.stores.redis import acquire_lock, cache_get, cache_set, release_lock
 from app.services.patterns import (
@@ -111,6 +114,56 @@ class PatternSuggestResult:
     errors: list[str]
     suggestions: dict[str, list[SuggestionItem]]
     raw: dict[str, Any]
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+async def persist_pattern_suggestions(
+    *,
+    session: AsyncSession,
+    run_id: str,
+    sample_size: int,
+    suggestions: dict[str, list[SuggestionItem]],
+) -> None:
+    """Upsert suggestions into DB for review in admin UI."""
+    now = _now_utc()
+
+    for kind, items in suggestions.items():
+        for it in items:
+            phrase = _normalize_phrase(it.phrase)
+            if not phrase:
+                continue
+
+            res = await session.execute(
+                select(PatternSuggestion).where(
+                    PatternSuggestion.kind == kind,
+                    PatternSuggestion.phrase == phrase,
+                )
+            )
+            row = res.scalar_one_or_none()
+
+            examples_json = json.dumps(it.examples, ensure_ascii=False)
+            if row:
+                row.match_count_last = int(it.match_count)
+                row.sample_size_last = int(sample_size)
+                row.match_count_max = max(int(row.match_count_max or 0), int(it.match_count))
+                row.examples_json = examples_json
+                row.last_run_id = run_id
+                row.last_seen_at = now
+            else:
+                row = PatternSuggestion(
+                    kind=kind,
+                    phrase=phrase,
+                    match_count_last=int(it.match_count),
+                    sample_size_last=int(sample_size),
+                    match_count_max=int(it.match_count),
+                    examples_json=examples_json,
+                    last_run_id=run_id,
+                    last_seen_at=now,
+                )
+                session.add(row)
 
 
 async def suggest_patterns(
@@ -280,6 +333,19 @@ async def suggest_patterns(
         await cache_set(cache_key, json.dumps(payload, ensure_ascii=False), TTL_SUGGEST_CACHE)
 
         suggestions = _score_suggestions(out, rows)
+
+        # Persist suggestions for later review in Admin UI.
+        run_id = uuid4().hex[:20]
+        try:
+            await persist_pattern_suggestions(
+                session=session,
+                run_id=run_id,
+                sample_size=sample_size,
+                suggestions=suggestions,
+            )
+        except Exception:
+            logger.exception("[pattern_suggest] failed to persist suggestions")
+
         return PatternSuggestResult(
             cached=False,
             llm_calls=llm_calls,
