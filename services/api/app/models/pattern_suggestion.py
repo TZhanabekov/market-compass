@@ -7,7 +7,7 @@ into `pattern_phrases` (the active ruleset) via /v1/admin/patterns.
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, Text, func
+from sqlalchemy import DateTime, Float, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.stores.postgres import Base
@@ -25,8 +25,14 @@ class PatternSuggestion(Base):
     match_count_last: Mapped[int] = mapped_column(Integer, default=0)
     sample_size_last: Mapped[int] = mapped_column(Integer, default=0)
 
+    # LLM confidence for the phrase from the latest suggest run (0..1)
+    llm_confidence_last: Mapped[float] = mapped_column(Float, default=0.0)
+
     # Best observed match frequency across all runs
     match_count_max: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Best observed LLM confidence across all runs
+    llm_confidence_max: Mapped[float] = mapped_column(Float, default=0.0)
 
     # Small examples payload (JSON-serialized text)
     examples_json: Mapped[str | None] = mapped_column(Text)

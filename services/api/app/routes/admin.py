@@ -675,6 +675,8 @@ async def list_pattern_suggestions(
                 "match_count_last": r.match_count_last,
                 "sample_size_last": r.sample_size_last,
                 "match_count_max": r.match_count_max,
+                "llm_confidence_last": getattr(r, "llm_confidence_last", 0.0),
+                "llm_confidence_max": getattr(r, "llm_confidence_max", 0.0),
                 "applied": (str(r.kind), str(r.phrase)) in active,
                 "last_run_id": r.last_run_id,
                 "last_seen_at": r.last_seen_at.isoformat() if r.last_seen_at else None,

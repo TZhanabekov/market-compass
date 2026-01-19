@@ -24,7 +24,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -91,17 +91,28 @@ def _normalize_phrase(s: str) -> str:
     return s
 
 
+class SuggestedPhrase(BaseModel):
+    phrase: str
+    confidence: float = Field(ge=0.0, le=1.0)
+
+    @field_validator("phrase")
+    @classmethod
+    def _norm_phrase(cls, v: str) -> str:
+        return _normalize_phrase(str(v))
+
+
 class PatternSuggestResponse(BaseModel):
-    contract: list[str] = Field(default_factory=list)
-    condition_new: list[str] = Field(default_factory=list)
-    condition_used: list[str] = Field(default_factory=list)
-    condition_refurbished: list[str] = Field(default_factory=list)
+    contract: list[SuggestedPhrase] = Field(default_factory=list)
+    condition_new: list[SuggestedPhrase] = Field(default_factory=list)
+    condition_used: list[SuggestedPhrase] = Field(default_factory=list)
+    condition_refurbished: list[SuggestedPhrase] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class SuggestionItem:
     phrase: str
     match_count: int
+    llm_confidence: float
     examples: list[dict[str, str]]
 
 
@@ -135,6 +146,7 @@ async def persist_pattern_suggestions(
             phrase = _normalize_phrase(it.phrase)
             if not phrase:
                 continue
+            conf = float(it.llm_confidence or 0.0)
 
             res = await session.execute(
                 select(PatternSuggestion).where(
@@ -148,7 +160,9 @@ async def persist_pattern_suggestions(
             if row:
                 row.match_count_last = int(it.match_count)
                 row.sample_size_last = int(sample_size)
+                row.llm_confidence_last = conf
                 row.match_count_max = max(int(row.match_count_max or 0), int(it.match_count))
+                row.llm_confidence_max = max(float(row.llm_confidence_max or 0.0), conf)
                 row.examples_json = examples_json
                 row.last_run_id = run_id
                 row.last_seen_at = now
@@ -158,7 +172,9 @@ async def persist_pattern_suggestions(
                     phrase=phrase,
                     match_count_last=int(it.match_count),
                     sample_size_last=int(sample_size),
+                    llm_confidence_last=conf,
                     match_count_max=int(it.match_count),
+                    llm_confidence_max=conf,
                     examples_json=examples_json,
                     last_run_id=run_id,
                     last_seen_at=now,
@@ -182,6 +198,7 @@ async def suggest_patterns(
     sample_limit = max(50, min(int(sample_limit), 2000))
     llm_batches = max(1, min(int(llm_batches), 4))
     items_per_batch = max(20, min(int(items_per_batch), 80))
+    max_concurrency = max(1, min(int(getattr(settings, "pattern_suggest_max_concurrency", 2)), 8))
 
     # Sample last N raw_offers (recent)
     res = await session.execute(
@@ -214,17 +231,21 @@ async def suggest_patterns(
         if cached:
             payload = _extract_first_json_object(cached)
             if isinstance(payload, dict):
-                parsed = PatternSuggestResponse.model_validate(payload)
-                suggestions = _score_suggestions(parsed, rows)
-                return PatternSuggestResult(
-                    cached=True,
-                    llm_calls=0,
-                    llm_successful_calls=0,
-                    sample_size=sample_size,
-                    errors=[],
-                    suggestions=suggestions,
-                    raw=payload,
-                )
+                try:
+                    parsed = PatternSuggestResponse.model_validate(payload)
+                    suggestions = _score_suggestions(parsed, rows)
+                    return PatternSuggestResult(
+                        cached=True,
+                        llm_calls=0,
+                        llm_successful_calls=0,
+                        sample_size=sample_size,
+                        errors=[],
+                        suggestions=suggestions,
+                        raw=payload,
+                    )
+                except ValidationError:
+                    # Old cached schema or corrupted payload; ignore cache.
+                    logger.info("[pattern_suggest] cached payload schema mismatch; ignoring cache")
 
     lock_key = f"{PREFIX_SUGGEST_LOCK}{_hash_key(cache_key)}"
     got_lock = await acquire_lock(lock_key, ttl=TTL_SUGGEST_LOCK)
@@ -239,17 +260,20 @@ async def suggest_patterns(
             if cached2:
                 payload = _extract_first_json_object(cached2)
                 if isinstance(payload, dict):
-                    parsed = PatternSuggestResponse.model_validate(payload)
-                    suggestions = _score_suggestions(parsed, rows)
-                    return PatternSuggestResult(
-                        cached=True,
-                        llm_calls=0,
-                        llm_successful_calls=0,
-                        sample_size=sample_size,
-                        errors=[],
-                        suggestions=suggestions,
-                        raw=payload,
-                    )
+                    try:
+                        parsed = PatternSuggestResponse.model_validate(payload)
+                        suggestions = _score_suggestions(parsed, rows)
+                        return PatternSuggestResult(
+                            cached=True,
+                            llm_calls=0,
+                            llm_successful_calls=0,
+                            sample_size=sample_size,
+                            errors=[],
+                            suggestions=suggestions,
+                            raw=payload,
+                        )
+                    except ValidationError:
+                        logger.info("[pattern_suggest] cached payload schema mismatch; ignoring cache")
 
         # Build representative batches (evenly spaced)
         batches: list[list[dict[str, str]]] = []
@@ -275,11 +299,24 @@ async def suggest_patterns(
         errors: list[str] = []
         ok_calls = 0
 
-        for b in batches:
-            llm_calls += 1
+        # Run batches concurrently (bounded) to reduce wall time while respecting rate limits.
+        sem = asyncio.Semaphore(max_concurrency)
+
+        async def _run_batch(batch: list[dict[str, str]]) -> tuple[dict[str, Any], str | None]:
+            async with sem:
+                return await _call_llm_suggest(batch)
+
+        llm_calls = len(batches)
+        results = await asyncio.gather(*(_run_batch(b) for b in batches), return_exceptions=True)
+
+        for res in results:
+            if isinstance(res, Exception):
+                errors.append(str(res)[:200])
+                continue
             try:
-                p, request_id = await _call_llm_suggest(b)
-                raw_payloads.append({"openai_request_id": request_id, "payload": p})
+                p, request_id = res
+                if len(raw_payloads) < 5:
+                    raw_payloads.append({"openai_request_id": request_id, "payload": p})
                 parsed = PatternSuggestResponse.model_validate(p)
                 ok_calls += 1
             except (RuntimeError, ValidationError) as e:
@@ -310,6 +347,7 @@ async def suggest_patterns(
             "errors": errors,
             "cache_key": cache_key,
             "force_refresh": bool(force_refresh),
+            "max_concurrency": max_concurrency,
         }
         payload["_raw_llm_payloads"] = raw_payloads[:5]
 
@@ -386,12 +424,16 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
         "- condition hints: new vs used vs refurbished\n\n"
         "You MUST use only phrases that appear in the provided inputs (title or link_hint).\n"
         "Return ONLY valid JSON with exactly these keys:\n"
-        '{ "contract": string[], "condition_new": string[], "condition_used": string[], "condition_refurbished": string[] }\n'
+        '{ "contract": {"phrase": string, "confidence": number}[], '
+        '"condition_new": {"phrase": string, "confidence": number}[], '
+        '"condition_used": {"phrase": string, "confidence": number}[], '
+        '"condition_refurbished": {"phrase": string, "confidence": number}[] }\n'
         "Rules:\n"
         "- lowercase phrases\n"
         "- phrases are 2..80 chars\n"
         "- no regex syntax, no wildcards\n"
-        "- prefer multi-word phrases when possible"
+        "- prefer multi-word phrases when possible\n"
+        "- confidence is 0..1, higher = more sure the phrase indicates that category"
     )
 
     user_prompt = (
@@ -438,6 +480,16 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
                 r = await client.post(url, headers=headers, json=body)
                 r.raise_for_status()
                 request_id = r.headers.get("x-request-id")
+                # Log actual rate-limit headers so we can tune concurrency safely.
+                rl = {
+                    "limit_requests": r.headers.get("x-ratelimit-limit-requests"),
+                    "remaining_requests": r.headers.get("x-ratelimit-remaining-requests"),
+                    "reset_requests": r.headers.get("x-ratelimit-reset-requests"),
+                    "limit_tokens": r.headers.get("x-ratelimit-limit-tokens"),
+                    "remaining_tokens": r.headers.get("x-ratelimit-remaining-tokens"),
+                    "reset_tokens": r.headers.get("x-ratelimit-reset-tokens"),
+                }
+                logger.info("[pattern_suggest] openai_ratelimit=%s request_id=%s", rl, request_id)
                 data_raw = r.json()
                 data = data_raw if isinstance(data_raw, dict) else {}
                 last_err = None
@@ -448,6 +500,18 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
         except httpx.HTTPStatusError as e:
             status = int(e.response.status_code) if e.response is not None else 0
             response_text = e.response.text[:500] if e.response is not None else ""
+            if e.response is not None and status in (429, 500, 502, 503, 504):
+                logger.warning(
+                    "[pattern_suggest] openai_ratelimit_headers=%s",
+                    {
+                        "x-ratelimit-limit-requests": e.response.headers.get("x-ratelimit-limit-requests"),
+                        "x-ratelimit-remaining-requests": e.response.headers.get("x-ratelimit-remaining-requests"),
+                        "x-ratelimit-reset-requests": e.response.headers.get("x-ratelimit-reset-requests"),
+                        "x-ratelimit-limit-tokens": e.response.headers.get("x-ratelimit-limit-tokens"),
+                        "x-ratelimit-remaining-tokens": e.response.headers.get("x-ratelimit-remaining-tokens"),
+                        "x-ratelimit-reset-tokens": e.response.headers.get("x-ratelimit-reset-tokens"),
+                    },
+                )
             logger.warning(
                 f"[pattern_suggest] LLM HTTP {status} attempt={attempt}/{len(waits)} "
                 f"url={url} model={settings.openai_model_parse} response={response_text}"
@@ -513,9 +577,17 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
 def _score_suggestions(parsed: PatternSuggestResponse, rows: list[tuple[str, str]]) -> dict[str, list[SuggestionItem]]:
     haystacks = [(t.lower(), u.lower()) for (t, u) in rows]
 
-    def _score(phrases: list[str]) -> list[SuggestionItem]:
+    def _score(items: list[SuggestedPhrase]) -> list[SuggestionItem]:
         out: list[SuggestionItem] = []
-        for p in _dedup_norm(phrases, limit=50):
+        # De-dup by phrase; keep max confidence if repeated across batches.
+        conf_by_phrase: dict[str, float] = {}
+        for it in items:
+            p = _normalize_phrase(it.phrase)
+            if not p:
+                continue
+            conf_by_phrase[p] = max(float(conf_by_phrase.get(p, 0.0)), float(it.confidence))
+
+        for p in _dedup_norm(list(conf_by_phrase.keys()), limit=50):
             c = 0
             examples: list[dict[str, str]] = []
             for t, u in haystacks:
@@ -524,7 +596,14 @@ def _score_suggestions(parsed: PatternSuggestResponse, rows: list[tuple[str, str
                     if len(examples) < 3:
                         examples.append({"title": t[:180], "link": u[:220]})
             if c > 0:
-                out.append(SuggestionItem(phrase=p, match_count=c, examples=examples))
+                out.append(
+                    SuggestionItem(
+                        phrase=p,
+                        match_count=c,
+                        llm_confidence=float(conf_by_phrase.get(p, 0.0)),
+                        examples=examples,
+                    )
+                )
         out.sort(key=lambda x: x.match_count, reverse=True)
         return out[:25]
 

@@ -146,6 +146,15 @@ class Settings(BaseSettings):
         le=1.0,
     )
 
+    # LLM pattern suggestions (admin)
+    pattern_suggest_max_concurrency: int = Field(
+        default=2,
+        validation_alias=AliasChoices("PATTERN_SUGGEST_MAX_CONCURRENCY"),
+        ge=1,
+        le=8,
+        description="Max concurrent OpenAI requests for /v1/admin/patterns/suggest",
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

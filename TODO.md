@@ -230,6 +230,9 @@ services/
   - [ ] Patterns management:
     - [ ] CRUD UI для `/v1/admin/patterns` (contract + condition phrases)
     - [ ] LLM suggest UI для `/v1/admin/patterns/suggest` + “apply selected phrases”
+    - [x] Persist suggestions to DB (`pattern_suggestions`) + list endpoint (`GET /v1/admin/patterns/suggestions`)
+    - [x] Pattern suggest: bounded parallel batches + log OpenAI `x-ratelimit-*` headers (tune via `PATTERN_SUGGEST_MAX_CONCURRENCY`)
+    - [x] Pattern suggestions: persist LLM confidence per phrase (0..1) + expose in list endpoint
 
 - [ ] Review queue для low-confidence matches
 - [ ] Sentry + Checkly + Vercel Analytics

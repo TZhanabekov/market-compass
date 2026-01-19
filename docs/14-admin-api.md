@@ -542,6 +542,11 @@ Read a recent sample of `raw_offers` (title + product_link) and ask the LLM to p
 - `LLM_ENABLED=true`
 - `OPENAI_API_KEY` set
 
+**Operational notes**
+- Batches are executed with **bounded parallelism** (to reduce wall time without spamming OpenAI).
+- Tune concurrency via `PATTERN_SUGGEST_MAX_CONCURRENCY` (default `2`).
+- The service logs OpenAI `x-ratelimit-*` headers for each call so you can see real limits in runtime logs.
+
 **Request body**
 - `sample_limit` (int, default `2000`, max `2000`)
 - `llm_batches` (int, default `3`, max `4`)
@@ -575,6 +580,7 @@ curl -sS "$API_BASE_URL/v1/admin/patterns/suggest" \
     "contract": [
       {
         "phrase": "monthly payments",
+        "llm_confidence": 0.86,
         "match_count": 42,
         "examples": [
           {
@@ -620,6 +626,8 @@ curl -sS "$API_BASE_URL/v1/admin/patterns/suggestions?kind=contract&limit=50&min
       "match_count_last": 42,
       "sample_size_last": 2000,
       "match_count_max": 42,
+        "llm_confidence_last": 0.86,
+        "llm_confidence_max": 0.86,
       "applied": false,
       "last_run_id": "b61b0c0d9f8b4c6a9a3d",
       "last_seen_at": "2026-01-18T08:00:00+00:00"
