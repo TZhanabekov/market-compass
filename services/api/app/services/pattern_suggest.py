@@ -383,6 +383,13 @@ async def suggest_patterns(
             )
         except Exception:
             logger.exception("[pattern_suggest] failed to persist suggestions")
+            # If DB schema is behind (e.g., missing new columns), the transaction becomes
+            # invalid and would fail on commit at session-exit. Roll back so the endpoint
+            # can still return suggestions.
+            try:
+                await session.rollback()
+            except Exception:
+                logger.exception("[pattern_suggest] rollback after persist failure also failed")
 
         return PatternSuggestResult(
             cached=False,
@@ -443,6 +450,8 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
 
     url = settings.openai_base_url.rstrip("/") + "/chat/completions"
     headers = {"Authorization": f"Bearer {settings.openai_api_key}", "Content-Type": "application/json"}
+    max_completion_tokens = int(getattr(settings, "pattern_suggest_max_completion_tokens", 5000))
+    max_completion_tokens = max(256, min(max_completion_tokens, 20_000))
     body = {
         "model": settings.openai_model_parse,
         "messages": [
@@ -450,7 +459,7 @@ async def _call_llm_suggest(items: list[dict[str, str]]) -> tuple[dict[str, Any]
             {"role": "user", "content": user_prompt},
         ],
         # GPT-5: completion tokens include reasoning+output; keep enough room.
-        "max_completion_tokens": 3000,
+        "max_completion_tokens": max_completion_tokens,
         # GPT-5: reduce hidden reasoning to avoid empty content.
         "reasoning_effort": "minimal",
         # GPT-5 class models: enforce JSON object output when supported.

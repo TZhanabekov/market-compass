@@ -155,6 +155,14 @@ class Settings(BaseSettings):
         description="Max concurrent OpenAI requests for /v1/admin/patterns/suggest",
     )
 
+    pattern_suggest_max_completion_tokens: int = Field(
+        default=5000,
+        validation_alias=AliasChoices("PATTERN_SUGGEST_MAX_COMPLETION_TOKENS"),
+        ge=256,
+        le=20_000,
+        description="OpenAI max_completion_tokens for /v1/admin/patterns/suggest",
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

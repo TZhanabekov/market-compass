@@ -546,6 +546,7 @@ Read a recent sample of `raw_offers` (title + product_link) and ask the LLM to p
 - Batches are executed with **bounded parallelism** (to reduce wall time without spamming OpenAI).
 - Tune concurrency via `PATTERN_SUGGEST_MAX_CONCURRENCY` (default `2`).
 - The service logs OpenAI `x-ratelimit-*` headers for each call so you can see real limits in runtime logs.
+- Increase output budget via `PATTERN_SUGGEST_MAX_COMPLETION_TOKENS` (default `5000`).
 
 **Request body**
 - `sample_limit` (int, default `2000`, max `2000`)

@@ -636,7 +636,12 @@ async def suggest_patterns_endpoint(req: PatternSuggestRequest) -> dict:
         "openai_base_url_host": urlparse(get_settings().openai_base_url).hostname if get_settings().openai_base_url else None,
         "suggestions": {
             kind: [
-                {"phrase": x.phrase, "match_count": x.match_count, "examples": x.examples}
+                {
+                    "phrase": x.phrase,
+                    "llm_confidence": x.llm_confidence,
+                    "match_count": x.match_count,
+                    "examples": x.examples,
+                }
                 for x in items
             ]
             for kind, items in res.suggestions.items()
