@@ -338,10 +338,10 @@ async def suggest_patterns(
 
         # normalize + de-dup, keep short lists
         out = PatternSuggestResponse(
-            contract=_dedup_norm(merged.contract, limit=30),
-            condition_new=_dedup_norm(merged.condition_new, limit=30),
-            condition_used=_dedup_norm(merged.condition_used, limit=30),
-            condition_refurbished=_dedup_norm(merged.condition_refurbished, limit=30),
+            contract=_dedup_suggested(merged.contract, limit=30),
+            condition_new=_dedup_suggested(merged.condition_new, limit=30),
+            condition_used=_dedup_suggested(merged.condition_used, limit=30),
+            condition_refurbished=_dedup_suggested(merged.condition_refurbished, limit=30),
         )
 
         payload = out.model_dump()
@@ -423,6 +423,28 @@ def _dedup_norm(items: list[str], *, limit: int) -> list[str]:
             continue
         out.append(p)
         seen.add(p)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _dedup_suggested(items: list["SuggestedPhrase"], *, limit: int) -> list["SuggestedPhrase"]:
+    # De-dup by normalized phrase; keep max confidence.
+    by_phrase: dict[str, float] = {}
+    for it in items:
+        p = _normalize_phrase(getattr(it, "phrase", ""))
+        if not p or len(p) < 2 or len(p) > 80:
+            continue
+        c = float(getattr(it, "confidence", 0.0))
+        if c < 0.0:
+            c = 0.0
+        if c > 1.0:
+            c = 1.0
+        by_phrase[p] = max(by_phrase.get(p, 0.0), c)
+
+    out: list[SuggestedPhrase] = []
+    for p in _dedup_norm(list(by_phrase.keys()), limit=limit):
+        out.append(SuggestedPhrase(phrase=p, confidence=float(by_phrase[p])))
         if len(out) >= limit:
             break
     return out
