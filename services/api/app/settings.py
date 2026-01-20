@@ -163,6 +163,22 @@ class Settings(BaseSettings):
         description="OpenAI max_completion_tokens for /v1/admin/patterns/suggest",
     )
 
+    pattern_suggest_max_batches: int = Field(
+        default=40,
+        validation_alias=AliasChoices("PATTERN_SUGGEST_MAX_BATCHES"),
+        ge=1,
+        le=200,
+        description="Max batches per /v1/admin/patterns/suggest run",
+    )
+
+    pattern_suggest_max_items_per_batch: int = Field(
+        default=120,
+        validation_alias=AliasChoices("PATTERN_SUGGEST_MAX_ITEMS_PER_BATCH"),
+        ge=20,
+        le=250,
+        description="Max items per batch for /v1/admin/patterns/suggest",
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

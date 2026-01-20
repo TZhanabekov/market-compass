@@ -196,8 +196,11 @@ async def suggest_patterns(
 
     # Hard caps to prevent oversized prompts/timeouts in production.
     sample_limit = max(50, min(int(sample_limit), 2000))
-    llm_batches = max(1, min(int(llm_batches), 4))
-    items_per_batch = max(20, min(int(items_per_batch), 80))
+    llm_batches = max(1, min(int(llm_batches), int(getattr(settings, "pattern_suggest_max_batches", 40))))
+    items_per_batch = max(
+        20,
+        min(int(items_per_batch), int(getattr(settings, "pattern_suggest_max_items_per_batch", 120))),
+    )
     max_concurrency = max(1, min(int(getattr(settings, "pattern_suggest_max_concurrency", 2)), 8))
 
     # Sample last N raw_offers (recent)
@@ -275,12 +278,14 @@ async def suggest_patterns(
                     except ValidationError:
                         logger.info("[pattern_suggest] cached payload schema mismatch; ignoring cache")
 
-        # Build representative batches (evenly spaced)
+        # Build batches from the sample (most recent first). `llm_batches` is a cap,
+        # so to cover the full sample set llm_batches >= ceil(sample_size/items_per_batch).
         batches: list[list[dict[str, str]]] = []
-        for i in range(llm_batches):
-            start = int(i * sample_size / llm_batches)
+        start = 0
+        while start < sample_size and len(batches) < llm_batches:
             end = min(sample_size, start + items_per_batch)
             chunk = rows[start:end]
+            start = end
             payload_chunk: list[dict[str, str]] = []
             for t, u in chunk:
                 if not t.strip():
@@ -342,6 +347,7 @@ async def suggest_patterns(
         payload = out.model_dump()
         payload["_meta"] = {
             "sample_size": sample_size,
+            "titles_sent": sum(len(b) for b in batches),
             "llm_calls": llm_calls,
             "llm_successful_calls": ok_calls,
             "errors": errors,

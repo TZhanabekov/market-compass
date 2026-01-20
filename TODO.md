@@ -233,6 +233,7 @@ services/
     - [x] Persist suggestions to DB (`pattern_suggestions`) + list endpoint (`GET /v1/admin/patterns/suggestions`)
     - [x] Pattern suggest: bounded parallel batches + log OpenAI `x-ratelimit-*` headers (tune via `PATTERN_SUGGEST_MAX_CONCURRENCY`)
     - [x] Pattern suggestions: persist LLM confidence per phrase (0..1) + expose in list endpoint
+    - [x] Pattern suggest: allow full-sample coverage by configuring batches/items caps (no hard-coded 4/80)
 
 - [ ] Review queue для low-confidence matches
 - [ ] Sentry + Checkly + Vercel Analytics

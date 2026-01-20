@@ -550,9 +550,11 @@ Read a recent sample of `raw_offers` (title + product_link) and ask the LLM to p
 
 **Request body**
 - `sample_limit` (int, default `2000`, max `2000`)
-- `llm_batches` (int, default `3`, max `4`)
-- `items_per_batch` (int, default `80`, max `80`)
+- `llm_batches` (int, default `3`) — how many batches to run (server-capped via `PATTERN_SUGGEST_MAX_BATCHES`)
+- `items_per_batch` (int, default `80`) — titles per batch (server-capped via `PATTERN_SUGGEST_MAX_ITEMS_PER_BATCH`)
 - `force_refresh` (bool, default `false`) — bypass Redis cache and force LLM calls
+
+Coverage note: total titles sent to LLM is approximately `min(sample_size, llm_batches * items_per_batch)`.
 
 **Example**
 
